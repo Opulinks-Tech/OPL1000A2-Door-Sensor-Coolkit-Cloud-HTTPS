@@ -13,7 +13,7 @@
 
 **prj_src** folder
 
-- Contains reference design source code, include library, implementation c code and project files. 
+- Contains reference design source code, SDK library, implementation c code and project file(APS_PATCH/examples/system/blewifi). 
 
 **Doc** folder
 
