@@ -64,6 +64,7 @@ static void BleWifi_Ble_ProtocolHandler_ReadDeviceInfo(uint16_t type, uint8_t *d
 static void BleWifi_Ble_ProtocolHandler_WriteDeviceInfo(uint16_t type, uint8_t *data, int len);
 static void BleWifi_Ble_ProtocolHandler_WifiStatus(uint16_t type, uint8_t *data, int len);
 static void BleWifi_Ble_ProtocolHandler_Reset(uint16_t type, uint8_t *data, int len);
+static void BleWifi_Ble_ProtocolHandler_Manually_Connect_AP(uint16_t type, uint8_t *data, int len);
 
 #if (BLE_OTA_FUNCTION_EN == 1)
 static void BleWifi_Ble_ProtocolHandler_OtaVersion(uint16_t type, uint8_t *data, int len);
@@ -101,6 +102,7 @@ static T_BleWifi_Ble_ProtocolHandlerTbl g_tBleProtocolHandlerTbl[] =
     {BLEWIFI_REQ_WRITE_DEVICE_INFO,         BleWifi_Ble_ProtocolHandler_WriteDeviceInfo},
     {BLEWIFI_REQ_WIFI_STATUS,               BleWifi_Ble_ProtocolHandler_WifiStatus},
     {BLEWIFI_REQ_RESET,                     BleWifi_Ble_ProtocolHandler_Reset},
+    {BLEWIFI_REQ_MANUAL_CONNECT_AP,         BleWifi_Ble_ProtocolHandler_Manually_Connect_AP},
 
 #if (BLE_OTA_FUNCTION_EN == 1)
     {BLEWIFI_REQ_OTA_VERSION,               BleWifi_Ble_ProtocolHandler_OtaVersion},
@@ -669,6 +671,13 @@ static void BleWifi_Ble_ProtocolHandler_Connect(uint16_t type, uint8_t *data, in
     BLEWIFI_INFO("BLEWIFI: Recv BLEWIFI_REQ_CONNECT \r\n");
     BleWifi_Wifi_DoConnect(data, len);
 }
+
+static void BleWifi_Ble_ProtocolHandler_Manually_Connect_AP(uint16_t type, uint8_t *data, int len)
+{
+    BLEWIFI_INFO("BLEWIFI: Recv BLEWIFI_REQ_MANUAL_CONNECT_AP \r\n");
+    BleWifi_Wifi_ManuallyConnectAP(data, len);
+}
+
 
 static void BleWifi_Ble_ProtocolHandler_Disconnect(uint16_t type, uint8_t *data, int len)
 {

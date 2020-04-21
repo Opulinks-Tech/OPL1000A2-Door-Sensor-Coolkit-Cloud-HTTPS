@@ -46,6 +46,7 @@ typedef enum {
     BLEWIFI_REQ_WRITE_DEVICE_INFO,          // Wifi write device information
     BLEWIFI_REQ_WIFI_STATUS,                // Wifi read AP status
     BLEWIFI_REQ_RESET,                      // Wifi reset AP
+    BLEWIFI_REQ_MANUAL_CONNECT_AP,          // Wifi connect AP by manual
     
     BLEWIFI_REQ_OTA_VERSION = 0x100,        // Ble OTA
     BLEWIFI_REQ_OTA_UPGRADE,                // Ble OTA

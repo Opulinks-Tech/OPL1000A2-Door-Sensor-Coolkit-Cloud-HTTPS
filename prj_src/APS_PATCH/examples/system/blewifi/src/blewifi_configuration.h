@@ -45,7 +45,7 @@ SNTP
 #define SNTP_FUNCTION_EN      (1)                   // SNTP 1: enable / 0: disable
 #define SNTP_SERVER           "1.cn.pool.ntp.org"   // SNTP Server
 #define SNTP_PORT_NUM         "123"                 // SNTP port Number
-#define SNTP_TIME_ZONE        (0)                   // Time zone: GMT+0   //Goter
+#define SNTP_TIME_ZONE        (0)                   // Time zone: GMT+0 
 
 /*
 BLE OTA FLAG
@@ -99,11 +99,11 @@ method 2: full name
 #define BLEWIFI_BLE_DEVICE_NAME_PREFIX      "OPL_"      // for method 1 "OPL_33:44:55:66"
 #define BLEWIFI_BLE_DEVICE_NAME_FULL        "OPL1000"   // for method 2
 
-/* Advertisement Interval Calculation Method:
+/* Advertisement Interval When BLE disconnectted:
  0xFFFF is deifined 30 min in dirver part
 */
-#define BLEWIFI_BLE_ADVERTISEMENT_INTERVAL_MIN  0xFFFF  // For 10 Second   //Goter
-#define BLEWIFI_BLE_ADVERTISEMENT_INTERVAL_MAX  0xFFFF  // For 10 Second
+#define BLEWIFI_BLE_ADVERTISEMENT_INTERVAL_MIN  0xFFFF  // For 30 min   //Goter
+#define BLEWIFI_BLE_ADVERTISEMENT_INTERVAL_MAX  0xFFFF  // For 30 min
 
 /* For network period
 1000 (ms) / 0.625 (ms) = 1600 = 0x640
@@ -138,6 +138,8 @@ if the auto connection is fail, the interval will be increased
 #define BLEWIFI_WIFI_AUTO_CONNECT_INTERVAL_INIT     (5000)      // ms
 #define BLEWIFI_WIFI_AUTO_CONNECT_INTERVAL_DIFF     (1000)      // ms
 #define BLEWIFI_WIFI_AUTO_CONNECT_INTERVAL_MAX      (30000)     // ms
+#define BLEWIFI_WIFI_AUTO_CONNECT_LIFETIME_MAX      (180000)    //ms
+
 
 /* DTIM the times of Interval: ms
 */
@@ -172,8 +174,14 @@ if the auto connection is fail, the interval will be increased
 
 #define LED_TIME_ALWAYS_OFF         (0x7FFFFFFF)
 
-#define LED_TIME_TEST_MODE_ON       (500)
-#define LED_TIME_TEST_MODE_OFF      (500)
+#define LED_TIME_TEST_MODE_ON_1       (200)
+#define LED_TIME_TEST_MODE_OFF_1      (200)
+#define LED_TIME_TEST_MODE_ON_2       (200)
+#define LED_TIME_TEST_MODE_OFF_2      (200)
+#define LED_TIME_TEST_MODE_ON_3       (200)
+#define LED_TIME_TEST_MODE_OFF_3      (200)
+#define LED_TIME_TEST_MODE_ON_4       (200)
+#define LED_TIME_TEST_MODE_OFF_4      (600)
 
 #define LED_TIME_NOT_CNT_SRV_ON_1   (100)
 #define LED_TIME_NOT_CNT_SRV_OFF_1  (100)
@@ -223,10 +231,14 @@ Define CR+LF Enable / Disable (Windows:CR+LF, Linux:CR and Mac:LF)
 Define Timer:
 */
 #define TEST_MODE_TIMER_DEF       (200)     // ms
-
+#define TEST_MODE_WIFI_DEFAULT_SSID     "8DB0839D"
+#define TEST_MODE_WIFI_DEFAULT_PASSWORD "094FAFE8"
 
 // Application Tasks Stack Size
 #define OS_TASK_STACK_SIZE_BLEWIFI_CTRL_APP         (1024)
+
+// Set Uart baudrate
+#define BLEWIFI_SYS_UART_BAUDRATE (9600)
 
 #endif /* __BLEWIFI_CONFIGURATION_H__ */
 

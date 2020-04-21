@@ -83,7 +83,7 @@ void BleWifi_Wifi_DoConnect(uint8_t *data, int len)
 {
     uint8_t ubAPPAutoConnectGetApNum = 0;
     uint32_t i = 0;
-    wifi_auto_connect_info_t *info = NULL;
+    wifi_auto_connect_info_t info = {0};
     uint8_t ubAPPConnect = 1;
 
     g_ubAppCtrlRequestRetryTimes = 0;
@@ -97,26 +97,17 @@ void BleWifi_Wifi_DoConnect(uint8_t *data, int len)
             wifi_auto_connect_get_ap_num(&ubAPPAutoConnectGetApNum);
             if (ubAPPAutoConnectGetApNum)
             {
-                info = (wifi_auto_connect_info_t *)malloc(sizeof(wifi_auto_connect_info_t));
-                if (!info)
-                {
-                    printf("malloc fail, info is NULL\r\n");
-                    BleWifi_Ble_SendResponse(BLEWIFI_RSP_CONNECT, BLEWIFI_WIFI_CONNECTED_FAIL);
-                    return;
-                }
-
-                memset(info, 0, sizeof(wifi_auto_connect_info_t));
+                memset(&info, 0, sizeof(wifi_auto_connect_info_t));
                 for (i = 0; i < ubAPPAutoConnectGetApNum; i++)
                 {
-                    wifi_auto_connect_get_ap_info(i, info);
-                    if(!MemCmp(wifi_config_req_connect.sta_config.bssid, info->bssid, sizeof(info->bssid)))
+                    wifi_auto_connect_get_ap_info(i, &info);
+                    if(!MemCmp(wifi_config_req_connect.sta_config.bssid, info.bssid, sizeof(info.bssid)))
                     {
                         wifi_connection_connect_from_ac_index(i);
                         ubAPPConnect = 0;
                         return;
                     }
-                }
-                free(info); 
+                } 
             }   
 
         }
@@ -137,6 +128,78 @@ void BleWifi_Wifi_DoConnect(uint8_t *data, int len)
         BleWifi_Ble_SendResponse(BLEWIFI_RSP_CONNECT, BLEWIFI_WIFI_CONNECTED_FAIL);
     }
 }
+
+void BleWifi_Wifi_ManuallyConnectAP(uint8_t *data, int len)
+{
+
+    uint8_t ubAPPAutoConnectGetApNum = 0;
+    uint32_t i = 0;
+    wifi_auto_connect_info_t info = {0};
+    uint8_t ubAPPConnect = 1;
+
+    g_ubAppCtrlRequestRetryTimes = 0;
+
+    BLEWIFI_INFO("BLEWIFI: Recv Connect Request\r\n");
+
+
+    // data format for connecting a hidden AP
+    //----------------------------------------------------------------------------
+    //|        1     |    1~32    |    1       |         1          |   8~63     |     
+    //----------------------------------------------------------------------------
+    //| ssid length  |    ssid    | Connected  |   password_length  |   password |
+    //----------------------------------------------------------------------------
+     
+    wifi_config_req_connect.sta_config.ssid_length = data[0];
+
+    
+    memcpy(wifi_config_req_connect.sta_config.ssid, &data[1], data[0]);
+    BLEWIFI_INFO("\r\n %d  Recv Connect Request  SSID is %s\r\n",__LINE__, wifi_config_req_connect.sta_config.ssid);
+
+    if (len >= (1 +data[0] +1 +1) ) // ssid length(1) + ssid (data(0)) + Connected(1) + password_length (1)
+    {
+        BLEWIFI_INFO(" \r\n Do Manually connect %d \r\n ",__LINE__);
+        // Determine the connected column
+        if (data[ 1 + data[0] ]) 
+        {
+            wifi_auto_connect_get_ap_num(&ubAPPAutoConnectGetApNum);
+            if (ubAPPAutoConnectGetApNum)
+            {
+                memset(&info, 0, sizeof(wifi_auto_connect_info_t));
+                for (i = 0; i < ubAPPAutoConnectGetApNum; i++)
+                {
+                    wifi_auto_connect_get_ap_info(i, &info);
+                    if(!MemCmp(wifi_config_req_connect.sta_config.bssid, info.bssid, sizeof(info.bssid)))
+                    {
+                        wifi_connection_connect_from_ac_index(i);
+                        ubAPPConnect = 0;
+                        BLEWIFI_INFO(" \r\n auto connect get bssid %d \r\n ",__LINE__);
+                        return;
+                    }
+                } 
+            }   
+    
+        }
+    
+            // Can't find ap in the ap record list
+        if (ubAPPConnect)
+        {
+            wifi_config_req_connect.sta_config.password_length = data [1 + data[0] +1 ];
+            memcpy((char *)wifi_config_req_connect.sta_config.password, &data[1 + data[0] +1 +1], wifi_config_req_connect.sta_config.password_length);
+    
+            BLEWIFI_INFO("\r\n %d  Recv SSID Password is %s\r\n",__LINE__, wifi_config_req_connect.sta_config.password);
+            wifi_set_config(WIFI_MODE_STA, &wifi_config_req_connect);
+            wifi_connection_connect(&wifi_config_req_connect);
+        }
+
+    }
+    else
+    {
+        BLEWIFI_INFO(" \r\n Not do Manually connect %d \r\n ",__LINE__);
+        BleWifi_Ble_SendResponse(BLEWIFI_RSP_CONNECT, BLEWIFI_WIFI_CONNECTED_FAIL);
+    }
+
+}
+
 
 void BleWifi_Wifi_DoDisconnect(void)
 {
@@ -274,7 +337,10 @@ void BleWifi_Wifi_SendStatusInfo(uint16_t uwType)
     {
         ubStatus = 1; // Return Failure
         if (uwType == BLEWIFI_IND_IP_STATUS_NOTIFY)     // if failure, don't notify the status
-            goto release;
+        {
+            printf("=== SSID length : 0 =====\n");
+            //goto release;
+        }
     }
     else
     {
@@ -316,7 +382,7 @@ void BleWifi_Wifi_SendStatusInfo(uint16_t uwType)
     /* create Wi-Fi status info data packet */
     BleWifi_Ble_DataSendEncap(uwType, pubData, uwDataLen);
 
-release:	
+//release:	
     free(pubData);
 }
 
@@ -672,11 +738,11 @@ static int BleWifi_Wifi_EventHandler_GotIp(wifi_event_id_t event_id, void *data,
 
 static int BleWifi_Wifi_EventHandler_ConnectionFailed(wifi_event_id_t event_id, void *data, uint16_t length)
 {
-    extern uint8_t g_ATWIFICNTRetry;  //Goter
+    extern uint8_t g_ATWIFICNTRetry;  
     uint8_t reason = *((uint8_t*)data);
 
     printf("\r\nWi-Fi Connected failed, reason %d\r\n", reason);
-/*++++++++++++++++++++++++++++++++++ Goter +++++++++++++++++++++++++++++++++++++++++*/
+
     if (( true == BleWifi_Ctrl_EventStatusGet(BLEWIFI_CTRL_EVENT_BIT_TEST_MODE))
         && (true == BleWifi_Ctrl_EventStatusGet(BLEWIFI_CTRL_EVENT_BIT_AT_WIFI_MODE)))
     {
@@ -688,7 +754,7 @@ static int BleWifi_Wifi_EventHandler_ConnectionFailed(wifi_event_id_t event_id, 
             return 0;
         }
     }
-    /*+------------------------ Goter +---------------------------------------*/
+
     BleWifi_Ctrl_MsgSend(BLEWIFI_CTRL_MSG_WIFI_DISCONNECTION_IND, NULL, 0);
 
     return 0;

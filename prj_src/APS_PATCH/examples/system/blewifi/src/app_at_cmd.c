@@ -660,6 +660,7 @@ void Write_Json_Wifi_MAC_Data(T_SendJSONParam *DeviceData)
     mac_addr_set_config_source(MAC_IFACE_WIFI_STA, MAC_SOURCE_FROM_FLASH);
 }
 
+#define SHOW_SHA256_RESULT_MAX_COUNT (3)
 uint8_t Calc_Sha256_key_Data(T_SendJSONParam *DeviceData)
 {
     int i;
@@ -669,6 +670,7 @@ uint8_t Calc_Sha256_key_Data(T_SendJSONParam *DeviceData)
     uint8_t ubaSHA256CalcStrBuf[SCRT_SHA_256_OUTPUT_LEN];
     int TerminalNull = 1;
     T_MwFim_SysMode tSysMode;
+    int count;
 
     int TotalLen = strlen(DeviceData->ubaDeviceId)
                  + strlen(DeviceData->ubaApiKey)
@@ -699,10 +701,14 @@ uint8_t Calc_Sha256_key_Data(T_SendJSONParam *DeviceData)
         return AT_FAIL;
      }
 
-    for(i = 0; i < sizeof(ubaSHA256CalcStrBuf); i++)
-        msg_print_uart1("%02x", ubaSHA256CalcStrBuf[i]);
+    for(count = 0; count < SHOW_SHA256_RESULT_MAX_COUNT; count++) {
+        for(i = 0; i < sizeof(ubaSHA256CalcStrBuf); i++) {
+            msg_print_uart1("%02x", ubaSHA256CalcStrBuf[i]);
+        }
+        msg_print_uart1("\r\n");
+    }
 
-    msg_print_uart1("\nOK\n");
+    msg_print_uart1("OK\r\n");
 
     if(NULL != uwSHA256_Buff)
         free(uwSHA256_Buff);
@@ -981,20 +987,14 @@ done:
 int app_at_cmd_sys_device_id(char *buf, int len, int mode)
 {
     int iRet = 0;
-    int argc = 0;
-    char *argv[AT_MAX_CMD_ARGS] = {0};
-    T_MwFim_GP12_HttpPostContent HttpPostContent;
-    memset(&HttpPostContent, 0, sizeof(T_MwFim_GP12_HttpPostContent));
-
-    if (!at_cmd_buf_to_argc_argv(buf, &argc, argv, AT_MAX_CMD_ARGS))
-    {
-        goto done;
-    }
-
+    
     switch (mode)
     {
         case AT_CMD_MODE_READ:
         {
+            if ( strcmp(g_tHttpPostContent.ubaDeviceId, DEVICE_ID) == 0) {
+                goto done;
+            }
             break;
         }
 
@@ -1020,20 +1020,14 @@ done:
 int app_at_cmd_sys_chip_id(char *buf, int len, int mode)
 {
     int iRet = 0;
-    int argc = 0;
-    char *argv[AT_MAX_CMD_ARGS] = {0};
-    T_MwFim_GP12_HttpPostContent HttpPostContent;
-    memset(&HttpPostContent, 0, sizeof(T_MwFim_GP12_HttpPostContent));
-
-    if (!at_cmd_buf_to_argc_argv(buf, &argc, argv, AT_MAX_CMD_ARGS))
-    {
-        goto done;
-    }
 
     switch (mode)
     {
         case AT_CMD_MODE_READ:
         {
+            if ( strcmp(g_tHttpPostContent.ubaChipId, CHIP_ID) == 0) {
+                goto done;
+            }
             break;
         }
 
@@ -1102,16 +1096,7 @@ int app_at_cmd_sys_factory(char *buf, int len, int mode)
 {
     if (AT_CMD_MODE_EXECUTION == mode)
     {
-        // stop the sys timer
-        osTimerStop(g_tAppCtrlSysTimer);
-        // stop the test mode timer
-        osTimerStop(g_tAppCtrlTestModeId);
-
-        // start test mode of LED blink
-        BleWifi_Ctrl_EventStatusSet(BLEWIFI_CTRL_EVENT_BIT_TEST_MODE, true);
-        BleWifi_Ctrl_LedStatusChange();
-
-        msg_print_uart1("factory mode\r\n");
+        BleWifi_Ctrl_MsgSend(BLEWIFI_CTRL_MSG_IS_TEST_MODE_AT_FACTORY, NULL, 0);
     }
 
     return true;
@@ -1149,7 +1134,7 @@ static void Wifi_Conn_TimerCallBack(void const *argu)
     if (( true == BleWifi_Ctrl_EventStatusGet(BLEWIFI_CTRL_EVENT_BIT_TEST_MODE))
         && (true == BleWifi_Ctrl_EventStatusGet(BLEWIFI_CTRL_EVENT_BIT_AT_WIFI_MODE)))
     {
-        msg_print_uart1("AT+WIFI=ERROR \r\n");
+        msg_print_uart1("AT+SIGNAL=0\r\n");
         BleWifi_Ctrl_EventStatusSet(BLEWIFI_CTRL_EVENT_BIT_AT_WIFI_MODE, false);
         #ifdef TEST_MODE_DEBUG_ENABLE
         msg_print_uart1("Wifi_Conn_Time out \r\n");
@@ -1158,23 +1143,82 @@ static void Wifi_Conn_TimerCallBack(void const *argu)
     }
 }
 
+static void Wifi_Conn_Start(char *ssid, char *password)
+{
+    uint8_t data[2];
+
+    g_ATWIFICNTRetry =0;
+
+    osTimerStop(g_tAppFactoryWifiConnTimerId);
+    osTimerStart(g_tAppFactoryWifiConnTimerId, TIMEOUT_WIFI_CONN_TIME);
+
+    BleWifi_Ctrl_EventStatusSet(BLEWIFI_CTRL_EVENT_BIT_AT_WIFI_MODE, true);
+
+    memset(g_WifiSSID,0x00,sizeof(g_WifiSSID));
+    memset(g_WifiPassword,0x00,sizeof(g_WifiPassword));
+
+    g_WifiSSIDLen = strlen(ssid);
+    g_WifiPasswordLen = strlen(password);
+    memcpy((char *)g_WifiSSID, ssid, g_WifiSSIDLen);
+    memcpy((char *)g_WifiPassword, password, g_WifiPasswordLen);
+
+    data[0] = 1;    // Enable to scan AP whose SSID is hidden
+    data[1] = 2;    // mixed mode
+
+    BleWifi_Wifi_DoScan(data, 0);
+}
+
 int app_at_cmd_sys_wifi(char *buf, int len, int mode)
 {
     int iRet = 0;
     int argc = 0;
     char *argv[AT_MAX_CMD_ARGS] = {0};
 
-    uint8_t data[2];
-
     if(!at_cmd_buf_to_argc_argv(buf, &argc, argv, AT_MAX_CMD_ARGS))
     {
+        msg_print_uart1("AT+SIGNAL=0\r\n");
         goto done;
     }
 
-    if(argc != 3)
+    if ( mode == AT_CMD_MODE_READ && argc == 1 )
     {
-        AT_LOG("invalid param number\r\n");
-        msg_print_uart1("AT+WIFI=ERROR \r\n");
+        Wifi_Conn_Start(TEST_MODE_WIFI_DEFAULT_SSID, TEST_MODE_WIFI_DEFAULT_PASSWORD);
+        msg_print_uart1("OK\r\n");
+    }
+    else if ( mode == AT_CMD_MODE_SET && argc == 3 )
+    {
+        Wifi_Conn_Start(argv[1], argv[2]);
+        msg_print_uart1("OK\r\n");
+    }
+    else 
+    {
+        msg_print_uart1("AT+SIGNAL=0\r\n");
+    }
+
+done:
+    return iRet;
+}
+
+int app_at_cmd_sys_gpio_read(char *buf, int len, int mode)
+{
+    int iRet = 0;
+    int argc = 0;
+    char *argv[GPIO_IDX_MAX + 1] = {0};
+
+    int i;
+    uint8_t u8GpioNum;
+    uint32_t u32PinLevel[GPIO_IDX_MAX] = {0};
+
+    if(!at_cmd_buf_to_argc_argv(buf, &argc, argv, GPIO_IDX_MAX + 1))
+    {
+        msg_print_uart1("AT+GPIO_READ=ERROR\r\n");
+        goto done;
+    }
+
+    if(argc < 2 || (GPIO_IDX_MAX + 1) < argc )
+    {
+        AT_LOG("invalid param number\n");
+        msg_print_uart1("AT+GPIO_READ=ERROR\r\n");
         goto done;
     }
 
@@ -1182,32 +1226,73 @@ int app_at_cmd_sys_wifi(char *buf, int len, int mode)
     {
         case AT_CMD_MODE_SET:
         {
-            g_ATWIFICNTRetry =0;
-            
-            osTimerStop(g_tAppFactoryWifiConnTimerId);
-            osTimerStart(g_tAppFactoryWifiConnTimerId, TIMEOUT_WIFI_CONN_TIME);
+            for ( i=1;i<argc;i++ )
+            {
+                u8GpioNum = (uint8_t)strtoul(argv[i], NULL, 0);
+                if ( u8GpioNum != BUTTON_IO_PORT && u8GpioNum != MAGNETIC_IO_PORT ) {
+                    AT_LOG("invalid GPIO number\r\n");
+                    msg_print_uart1("AT+GPIO_READ=ERROR\r\n");
+                    goto done;
+                }
+                u32PinLevel[i-1] = Hal_Vic_GpioInput((E_GpioIdx_t)u8GpioNum);
+            }
 
-            BleWifi_Ctrl_EventStatusSet(BLEWIFI_CTRL_EVENT_BIT_AT_WIFI_MODE, true);
+            msg_print_uart1("AT+GPIO_READ=");
+            for ( i=1;i<argc;i++)
+            {
+                if ( i == 1 ) {
+                    msg_print_uart1("%d", u32PinLevel[i-1] ? 1 : 0);
+                }
+                else {
+                    msg_print_uart1(",%d", u32PinLevel[i-1] ? 1 : 0);
+                }
+            }
+            msg_print_uart1("\r\n");
+        }
+            break;
+        default:{
+            msg_print_uart1("AT+GPIO_READ=ERROR\r\n");
+            goto done;
+        }
+    }
+    iRet = 1;
+done:
+    return iRet;
+}
 
-            memset(g_WifiSSID,0x00,sizeof(g_WifiSSID));
-            memset(g_WifiPassword,0x00,sizeof(g_WifiPassword));
+int app_at_cmd_sys_delete_data(char *buf, int len, int mode)
+{
+    int iRet = 0;
 
-            memcpy(g_WifiSSID ,argv[1] ,strlen(argv[1]));
-            memcpy(g_WifiPassword ,argv[2] ,strlen(argv[2]));
-            g_WifiSSIDLen = strlen(argv[1]);
-            g_WifiPasswordLen = strlen(argv[2]);
-
-            data[0] = 1;    // Enable to scan AP whose SSID is hidden
-            data[1] = 2;    // mixed mode
-
-            BleWifi_Wifi_DoScan(data, 0);
+    switch (mode)
+    {
+        case AT_CMD_MODE_EXECUTION:
+        {
+            if(MW_FIM_FAIL == MwFim_FileWriteDefault(MW_FIM_IDX_GP03_LE_CFG, 0))
+            {
+                goto done;
+            }
+            if(MW_FIM_FAIL == MwFim_FileWriteDefault(MW_FIM_IDX_GP03_STA_MAC_ADDR, 0))
+            {
+                goto done;
+            }
+            if(MW_FIM_FAIL == MwFim_FileWriteDefault(MW_FIM_IDX_GP12_PROJECT_DEVICE_AUTH_CONTENT, 0))
+            {
+                goto done;
+            }
         }
             break;
         default:
-            msg_print_uart1("AT+WIFI=ERROR \r\n");
-            break;
+            goto done;
     }
+    iRet = 1;
 done:
+    if (iRet) {
+        msg_print_uart1("AT+DELETE_DATA=OK\r\n");
+    }
+    else {
+        msg_print_uart1("AT+DELETE_DATA=ERROR\r\n");
+    }
     return iRet;
 }
 
@@ -1252,6 +1337,8 @@ at_command_t g_taAppAtCmd[] =
     { "at+factory",     app_at_cmd_sys_factory,            "Enter Test Mode" },
     { "at+ver",         app_at_cmd_sys_version,            "Firmware Version" },
     { "at+wifi",        app_at_cmd_sys_wifi,               "Check strength of wifi" },
+    { "at+gpio_read",   app_at_cmd_sys_gpio_read,          "Check Level of GPIO num" },
+    { "at+delete_data", app_at_cmd_sys_delete_data,        "Delete product data" },
 #if (WIFI_OTA_FUNCTION_EN == 1)
     { "at+ota",         app_at_cmd_sys_do_wifi_ota, "Do Wifi OTA" },
 #endif

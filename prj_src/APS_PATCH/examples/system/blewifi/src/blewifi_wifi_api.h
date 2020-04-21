@@ -111,11 +111,12 @@ typedef struct
 #define BLEWIFI_WIFI_DISCONNECTED_DONE  0
 #define BLEWIFI_WIFI_DISCONNECTED_FAIL  1
 
-#define ATWIFI_CNT_FAILED_RETRY 10  //Goter
+#define ATWIFI_CNT_FAILED_RETRY 10  
 
 
 void BleWifi_Wifi_DoScan(uint8_t *data, int len);
 void BleWifi_Wifi_DoConnect(uint8_t *data, int len);
+void BleWifi_Wifi_ManuallyConnectAP(uint8_t *data, int len);
 void BleWifi_Wifi_DoDisconnect(void);
 void BleWifi_Wifi_ReadDeviceInfo(void);
 void BleWifi_Wifi_WriteDeviceInfo(uint8_t *data, int len);

@@ -49,6 +49,7 @@
 #include "ble_host_patch_init.h"
 #include "ps_patch.h"
 #include "mw_fim_patch.h"
+#include "mw_fim_default_group01_patch.h"
 #include "sys_cfg_patch.h"
 
 
@@ -315,7 +316,7 @@ void Sys_DriverInit_patch(void)
     // Other driver config need by Task-level (sleep strategy)
 
     // Diag task
-    Hal_DbgUart_RxCallBackFuncSet(uartdbg_rx_int_handler);
+    //Hal_DbgUart_RxCallBackFuncSet(uartdbg_rx_int_handler);  //Assigned in diag_task
     // cold boot
     if (0 == Boot_CheckWarmBoot())
     {
@@ -497,6 +498,7 @@ void SysInit_EntryPoint(void)
     
     // 19. FIM
     MwFim_PreInit_patch();
+    MwFim_Group01_patch();
 
     // 20. AUXADC
 

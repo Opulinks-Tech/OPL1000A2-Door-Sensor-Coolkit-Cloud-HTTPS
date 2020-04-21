@@ -116,7 +116,6 @@ INCDIR += -I ../../../../APS/middleware/third_party/lwip-2.0.3/ports/freertos/ne
 INCDIR += -I ../../../../APS/middleware/third_party/lwip-2.0.3/ports/rom_if
 INCDIR += -I ../../../../APS/middleware/third_party/mbedtls/configs
 INCDIR += -I ../../../../APS/middleware/third_party/mbedtls/include/mbedtls
-INCDIR += -I ../../../../APS/middleware/third_party/mbedtls/include
 INCDIR += -I ../../../../APS/middleware/third_party/mbedtls/port/include
 INCDIR += -I ../../../../APS/middleware/third_party/tinycrypt/include
 INCDIR += -I ../../../../APS/middleware/third_party/tinycrypt/include/tinycrypt
@@ -221,8 +220,7 @@ INCDIR += -I ../../../../APS_PATCH/project/opl1000/lib
 INCDIR += -I ../../../../APS_PATCH/apps/le_app/include
 INCDIR += -I ./src
 INCDIR += -I ./src/iot_data
-INCDIR += -I ./src/common
-INCDIR += -I ./src/sensor
+INCDIR += -I ./src/components
 
 #############   source    ##############
 M_SRC  = ./src/main_patch.c
@@ -238,17 +236,6 @@ M_SRC += ./src/blewifi_wifi_api.c
 M_SRC += ./src/blewifi_common.c
 M_SRC += ./src/blewifi_http_ota.c
 M_SRC += ./src/mw_fim_default_group11_project.c
-M_SRC += ./src/mw_fim_default_group12_project.c
-M_SRC += ./src/iot_data/iot_data.c
-M_SRC += ./src/iot_data/iot_rb_data.c
-M_SRC += ./src/common/ftoa_util.c
-M_SRC += ./src/sensor/sensor_battery.c
-M_SRC += ./src/sensor/sensor_button.c
-M_SRC += ./src/sensor/sensor_common.c
-M_SRC += ./src/sensor/sensor_data.c
-M_SRC += ./src/sensor/sensor_door.c
-M_SRC += ./src/sensor/sensor_https.c
-
 #############   build   ##############
 all:
 	@mkdir $(FOLDER)

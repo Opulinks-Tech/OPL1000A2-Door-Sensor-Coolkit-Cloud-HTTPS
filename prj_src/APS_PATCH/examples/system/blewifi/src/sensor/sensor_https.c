@@ -59,7 +59,7 @@
 
 #define BODY_FORMAT   "POST %s %s\r\n%s%s\r\n%s\r\n%s%s\r\n%s%d\r\n\r\n%s"
 
-#define RSSI_SHINFT         25
+#define RSSI_SHINFT         22
 
 #define MAX_TYPE1_2_3_COUNT 3
 
@@ -483,7 +483,7 @@ static int Sensor_Https_Destroy(mbedtls_ssl_context *ssl)
     return ret;
 }
 
-int Sensor_Https_Post(unsigned char *post_data, int len)
+static int Sensor_Https_Post(unsigned char *post_data, int len)
 {
     int ReturnValue = SENSOR_DATA_FAIL;
 
@@ -499,21 +499,21 @@ int Sensor_Https_Post(unsigned char *post_data, int len)
     {
         if(u8Establish == 1)
         {
-                printf(" Change URL so need to re-establiash socket...\n");
-        /* Destroy */
-        if (0 != ((Sensor_Https_Destroy(&ssl))))
-        {
-            printf("Destroy Failure\n\n");
-        }
+            printf(" Change URL so need to re-establiash socket...\n");
+            /* Destroy */
+            if (0 != ((Sensor_Https_Destroy(&ssl))))
+            {
+                printf("Destroy Failure\n\n");
+            }
 
-        mbedtls_net_free( &server_fd );
-        mbedtls_x509_crt_free( &cacert );
-        mbedtls_ssl_free( &ssl );
-        mbedtls_ssl_config_free( &conf );
-        mbedtls_ctr_drbg_free( &ctr_drbg );
-        mbedtls_entropy_free( &entropy );
+            mbedtls_net_free( &server_fd );
+            mbedtls_x509_crt_free( &cacert );
+            mbedtls_ssl_free( &ssl );
+            mbedtls_ssl_config_free( &conf );
+            mbedtls_ctr_drbg_free( &ctr_drbg );
+            mbedtls_entropy_free( &entropy );
 
-        u8Establish = 0;
+            u8Establish = 0;
         }        
         BleWifi_Ctrl_EventStatusSet(BLEWIFI_CTRL_EVENT_BIT_CHANGE_HTTPURL, false);
     }
@@ -872,16 +872,19 @@ int Sensor_Https_Post_On_Line(void)
 
                 if(Sensor_Data_CheckEmpty() == SENSOR_DATA_OK)
                 {
+                    g_nType1_2_3_Retry_counter++;
+                    printf("Type %d  post failed , retry count is %d .....\n",PostContentData.ContentType, g_nType1_2_3_Retry_counter);
+
                     if(g_nType1_2_3_Retry_counter < MAX_TYPE1_2_3_COUNT)
                     { 
-                        g_nType1_2_3_Retry_counter++;
-                        printf("Type %d  post failed , retry count is %d .....\n",PostContentData.ContentType, g_nType1_2_3_Retry_counter);
-
                         osTimerStop(g_tAppCtrlType1_2_3_HttpPostRetryTimer);
                         osTimerStart(g_tAppCtrlType1_2_3_HttpPostRetryTimer, POST_DATA_TIME_RETRY);
                     }
                     else 
                     {
+                        BleWifi_Ctrl_EventStatusSet(BLEWIFI_CTRL_EVENT_BIT_NOT_CNT_SRV, false);
+                        BleWifi_Ctrl_LedStatusChange();
+
                         printf("Type %d  post failed , retry count over\n",PostContentData.ContentType);
                         g_nType1_2_3_Retry_counter = 0;
                     }

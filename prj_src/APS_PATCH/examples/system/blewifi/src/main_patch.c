@@ -51,6 +51,7 @@ Head Block of The File
 #include "at_cmd_common_patch.h"
 #include "mw_fim.h"
 #include "mw_fim_default.h"
+#include "hal_uart.h"
 #include "hal_dbg_uart.h"
 #include "hal_vic.h"
 #include "boot_sequence.h"
@@ -265,6 +266,7 @@ static void Main_MiscDriverConfigSetup(void)
         {
             Main_ApsUartRxDectecConfig();
         }
+        Hal_Uart_BaudRateSet(UART_IDX_1, BLEWIFI_SYS_UART_BAUDRATE);
     }
 }
 
