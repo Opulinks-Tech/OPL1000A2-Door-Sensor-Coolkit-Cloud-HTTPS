@@ -14,7 +14,7 @@
 #include "hal_vic.h"
 #include "blewifi_ctrl.h"
 #include "blewifi_ble_api.h"
-
+#if 0
 osTimerId g_tAppButtonTimerId;
 osTimerId g_tAppButtonLongPressTimerId;
 osTimerId g_tAppButtonBleAdvTimerId;
@@ -168,3 +168,4 @@ void Sensor_ButtonPress_Init(void)
     Sensor_ButtonPress_TimerInit();
     Sensor_ButtonPress_BleAdvInit();
 }
+#endif

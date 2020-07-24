@@ -28,6 +28,7 @@
 #include "hal_vic_patch.h"
 #include "hal_gpio.h"
 #include "hal_spi_patch.h"
+#include "hal_flash_patch.h"
 #include "hal_uart_patch.h"
 #include "hal_dbg_uart_patch.h"
 #include "hal_auxadc_patch.h"
@@ -44,6 +45,7 @@
 #include "ipc_patch.h"
 #include "agent_patch.h"
 #include "wifi_service_func_init_patch.h"
+#include "wifi_mac_tx_data_patch.h"
 #include "lwip_jmptbl_patch.h"
 #include "le_ctrl_patch.h"
 #include "ble_host_patch_init.h"
@@ -51,7 +53,8 @@
 #include "mw_fim_patch.h"
 #include "mw_fim_default_group01_patch.h"
 #include "sys_cfg_patch.h"
-
+#include "opl1000_it_patch.h"
+#include "events_netlink_patch.h"
 
 /*
  *************************************************************************
@@ -67,6 +70,8 @@
 
 #define DEV_32K_SRC_SEL_32K_XTAL    0   /* Default */
 #define DEV_32K_SRC_SEL_32K_RC      IPC_SPARE0_SEQ_32K_SRC_SEL
+
+#define IRQ_PRIORITY_IPC3_PATCH     0x0A
 /*
  *************************************************************************
  *                          Typedefs and Structures
@@ -290,6 +295,7 @@ void Sys_DriverInit_patch(void)
     Hal_Vic_IpcIntEn(IPC_IDX_1, 1);
     Hal_Vic_IpcIntEn(IPC_IDX_2, 1);
     Hal_Vic_IpcIntEn(IPC_IDX_3, 1);
+    NVIC_SetPriority(IPC3_IRQn, IRQ_PRIORITY_IPC3_PATCH);   // NOTE: for sleep IO detect
 
     // Init DBG_UART
     Hal_DbgUart_Init(115200);
@@ -456,6 +462,7 @@ void SysInit_EntryPoint(void)
     // 6. Wifi
     wifi_ctrl_init_patch();
     wifi_service_func_init_patch();
+    wifi_mac_txdata_func_init_patch();
     
     // 7. le_ctrl
     le_ctrl_pre_patch_init();
@@ -469,6 +476,7 @@ void SysInit_EntryPoint(void)
     // 10. WPAS
     wpa_cli_func_init_patch();
     wpa_driver_func_init_patch();
+    wpa_events_func_init_patch();
     
     // 11. AT
     at_func_init_patch();
@@ -481,6 +489,7 @@ void SysInit_EntryPoint(void)
     Hal_Pin_PatchInit();
     Hal_Vic_PatchInit();
     Hal_Spi_PatchInit();
+    Hal_Flash_PatchInit();
     Hal_Uart_PatchInit();
     Hal_DbgUart_PatchInit();
     Hal_Aux_PatchInit();
@@ -492,6 +501,7 @@ void SysInit_EntryPoint(void)
     ps_patch_init();
 
     // 17. ISR
+    ISR_Pre_PatchInit();
 
     // 18. DIAG
     Diag_PatchInit();

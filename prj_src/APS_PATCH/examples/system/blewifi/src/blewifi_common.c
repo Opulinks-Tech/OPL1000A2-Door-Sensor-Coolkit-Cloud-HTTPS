@@ -15,6 +15,7 @@
 #include "sys_common_api.h"
 #include "mw_fim_default_group01.h"
 #include "lwip/errno.h"
+#include "sys_common_api_patch.h"
 
 #if (SNTP_FUNCTION_EN == 1)
 #include "cmsis_os.h"
@@ -254,6 +255,8 @@ void BleWifi_RFPowerSetting(uint8_t level)
             printf("\r\nGroup 01 Write RF Power Value - ERROR\r\n");
         }
     }
+    
+    sys_set_wifi_lowpower_tx_vdd_rf(BLEWIFI_COM_RF_SMPS_SETTING);
 
 #if 0
     int ret = 0;

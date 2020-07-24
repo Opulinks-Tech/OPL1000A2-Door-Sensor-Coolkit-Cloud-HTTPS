@@ -133,6 +133,7 @@ static void BleWifi_Ble_SmMsgHandler_PairingCompleteInd(TASK task, MESSAGEID id,
 
 static void BleWifi_Ble_SetAdvtisingPara(UINT8 type, UINT8 own_addr_type, LE_BT_ADDR_T *peer_addr, UINT8 filter, UINT16 interval_min, UINT16 interval_max)
 {
+    LE_ERR_STATE rc;
 	LE_GAP_ADVERTISING_PARAM_T para;
 
 	para.interval_min = interval_min;
@@ -154,7 +155,12 @@ static void BleWifi_Ble_SetAdvtisingPara(UINT8 type, UINT8 own_addr_type, LE_BT_
 	para.channel_map = 0x7;
     para.filter_policy = filter;
 
-	LeGapSetAdvParameter(&para);
+	rc = LeGapSetAdvParameter(&para);
+    
+    if (rc != SYS_ERR_SUCCESS)
+    {
+        BLEWIFI_INFO("APP-BLE Set Advtising Param fail rc = %x\r\n", rc);
+    }
 }
 
 static void BleWifi_UtilHexToStr(void *data, UINT16 len, UINT8 **p)

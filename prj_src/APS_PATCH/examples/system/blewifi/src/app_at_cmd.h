@@ -12,12 +12,21 @@
 #ifndef _APP_AT_CMD_H_
 #define _APP_AT_CMD_H_
 
+typedef struct
+{
+    char ubaDeviceId[DEVICE_ID_LEN];
+    char ubaApiKey[API_KEY_LEN];
+    char ubaWifiMac[CHIP_ID_LEN];
+    char ubaBleMac[CHIP_ID_LEN];
+    char ubaDeviceModel[MODEL_ID_LEN];
+} T_SendJSONParam;
 
+int Write_data_into_fim(T_SendJSONParam *DeviceData);
 void app_at_cmd_add(void);
 
 
 /* For Check strength of wifi */
-#define TIMEOUT_WIFI_CONN_TIME                          (20000) //unit : ms 
+#define TIMEOUT_WIFI_CONN_TIME                          (20000) //unit : ms
 #define MAX_WIFI_PASSWORD_LEN                           (64)
 
 extern uint8_t g_WifiSSID[WIFI_MAX_LENGTH_OF_SSID];

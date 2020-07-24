@@ -94,7 +94,7 @@ void BleWifiAppInit(void)
         //    ps_smart_sleep(tPowerSaving.ubPowerSaving);
 
         /* RF Power settings */
-        BleWifi_RFPowerSetting(tPowerSaving.ubRFPower);
+        BleWifi_RFPowerSetting(BLEWIFI_COM_RF_POWER_SETTINGS);
     }
 
     // update the system mode

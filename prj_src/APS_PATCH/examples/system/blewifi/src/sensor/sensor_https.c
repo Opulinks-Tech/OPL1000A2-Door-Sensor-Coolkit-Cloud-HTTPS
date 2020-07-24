@@ -17,6 +17,13 @@
 #include "mbedtls/error.h"
 #include "mbedtls/certs.h"
 
+#include "lwip/sockets.h"
+#include "lwip/netdb.h"
+#include "lwip/tcp.h"
+#include "lwip/err.h"
+#include "lwip/sys.h"
+#include "lwip/errno.h"
+
 #include "blewifi_ctrl.h"
 #include "blewifi_data.h"
 #include "blewifi_common.h"
@@ -33,6 +40,10 @@
 
 
 #include "controller_wifi.h"
+
+#define TCP_LOCAL_PORT_RANGE_START        0xc000
+#define TCP_LOCAL_PORT_RANGE_END          0xffff
+#define TCP_ENSURE_LOCAL_PORT_RANGE(port) ((u16_t)(((port) & ~TCP_LOCAL_PORT_RANGE_START) + TCP_LOCAL_PORT_RANGE_START))
 
 #define HDR_HOST_DIR         " HTTP/1.1"
 #define HDR_HOST             "Host:"
@@ -110,7 +121,7 @@ float g_fBatteryVoltage = 0;
 int g_nHrlyPostRetry = 0;
 
 #define POST_FAILED_RETRY    3
-#define MAX_HOUR_RETRY_POST  5  // Total = MAX_HOUR_RETRY_POST*POST_FAILED_RETRY =25  //Goter
+#define MAX_HOUR_RETRY_POST  3  // Total = MAX_HOUR_RETRY_POST*POST_FAILED_RETRY = 9, change by 20200528
 
 static void my_debug( void *ctx, int level,
                       const char *file, int line,
@@ -193,6 +204,107 @@ static int Sensor_Https_Init(mbedtls_net_context *server_fd,
     return true;
 }
 
+/*
+ * Set the socket blocking or non-blocking
+ */
+static int mbedtls_net_ex_set_block(mbedtls_net_context *ctx)
+{
+    return ( fcntl( ctx->fd, F_SETFL, fcntl( ctx->fd, F_GETFL, 0 ) & ~O_NONBLOCK ) );
+}
+
+static int mbedtls_net_ex_set_nonblock(mbedtls_net_context *ctx)
+{
+    return ( fcntl( ctx->fd, F_SETFL, fcntl( ctx->fd, F_GETFL, 0 ) | O_NONBLOCK ) );
+}
+
+/*
+ * Initiate a TCP connection with host:port and the given protocol
+ */
+static int mbedtls_net_connect_ex( mbedtls_net_context *ctx, const char *host,
+                         const char *port, int proto )
+{
+    int ret;
+    struct addrinfo hints, *addr_list, *cur;
+    struct sockaddr_in local_addr = {0};
+    struct netif *iface = netif_find("st1");
+
+    /* Do name resolution with both IPv6 and IPv4 */
+    memset( &hints, 0, sizeof( hints ) );
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = proto == MBEDTLS_NET_PROTO_UDP ? SOCK_DGRAM : SOCK_STREAM;
+    hints.ai_protocol = proto == MBEDTLS_NET_PROTO_UDP ? IPPROTO_UDP : IPPROTO_TCP;
+
+    if( getaddrinfo( host, port, &hints, &addr_list ) != 0 ) {
+        return( MBEDTLS_ERR_NET_UNKNOWN_HOST );
+    }
+
+    /* Try the sockaddrs until a connection succeeds */
+    ret = MBEDTLS_ERR_NET_UNKNOWN_HOST;
+    for( cur = addr_list; cur != NULL; cur = cur->ai_next )
+    {
+        ctx->fd = (int) socket( cur->ai_family, cur->ai_socktype,
+                            cur->ai_protocol );
+
+        if( ctx->fd < 0 )
+        {
+            ret = MBEDTLS_ERR_NET_SOCKET_FAILED;
+            continue;
+        }
+
+        srand(reg_read(0x40003044));
+
+        local_addr.sin_family = AF_INET;
+        local_addr.sin_port = htons(TCP_ENSURE_LOCAL_PORT_RANGE((u32_t)rand()));
+        local_addr.sin_addr.s_addr = iface->ip_addr.u_addr.ip4.addr;
+        if (bind(ctx->fd, (struct sockaddr*)&local_addr, sizeof(local_addr)) != 0) {
+            printf("bind failed\n");
+        }
+
+        printf("local_addr.sin_port=%d\n", local_addr.sin_port);
+
+        mbedtls_net_ex_set_nonblock(ctx);
+
+        if ( connect( ctx->fd, cur->ai_addr, cur->ai_addrlen ) == 0 ) {
+            ret = 0;
+            mbedtls_net_ex_set_block(ctx);
+            break;
+        }
+        else
+        {
+            if (errno == EINPROGRESS)
+            {
+                fd_set rfds, wfds;
+                struct timeval tv;
+
+                FD_ZERO(&rfds);
+                FD_ZERO(&wfds);
+                FD_SET(ctx->fd, &rfds);
+                FD_SET(ctx->fd, &wfds);
+
+                tv.tv_sec = (SSL_SOCKET_TIMEOUT / 1000);
+                tv.tv_usec = (SSL_SOCKET_TIMEOUT % 1000) * 1000;
+
+                int selres = select(ctx->fd + 1, &rfds, &wfds, NULL, &tv);
+
+                if (selres > 0) {
+                    if (FD_ISSET(ctx->fd, &wfds)) {
+                        ret = 0;
+                        mbedtls_net_ex_set_block(ctx);
+                        break;
+                    }
+                }
+            }
+        }
+
+        close( ctx->fd );
+        ret = MBEDTLS_ERR_NET_CONNECT_FAILED;
+    }
+
+    freeaddrinfo( addr_list );
+
+    return (ret);
+}
+
 static int Sensor_Https_Establish(mbedtls_net_context *server_fd,
                            mbedtls_ssl_context *ssl,
                            mbedtls_ssl_config *conf,
@@ -230,10 +342,10 @@ static int Sensor_Https_Establish(mbedtls_net_context *server_fd,
      */
     printf("Connecting to tcp/%s:%s...\n\n", URL, Port);
 
-    if ((ret = mbedtls_net_connect(server_fd, URL,
+    if ((ret = mbedtls_net_connect_ex(server_fd, URL,
                                    Port, MBEDTLS_NET_PROTO_TCP)) != 0)
     {
-        printf("mbedtls_net_connect returned -0x%x\n\n", -ret);
+        printf("mbedtls_net_connect_ex returned -0x%x\n\n", -ret);
         return false;
     }
 
@@ -514,7 +626,7 @@ static int Sensor_Https_Post(unsigned char *post_data, int len)
             mbedtls_entropy_free( &entropy );
 
             u8Establish = 0;
-        }        
+        }
         BleWifi_Ctrl_EventStatusSet(BLEWIFI_CTRL_EVENT_BIT_CHANGE_HTTPURL, false);
     }
 
@@ -807,9 +919,9 @@ int Sensor_Https_Post_On_Line(void)
                 break;
             }
         } while((SENSOR_DATA_OK != PostResult) && (Count < POST_FAILED_RETRY)); //Goter
-        
+
         /*++++++++++++++++++++++ Goter ++++++++++++++++++++++++++++*/
-        
+
         if (SENSOR_DATA_FAIL == PostResult)
         {
 
@@ -818,12 +930,12 @@ int Sensor_Https_Post_On_Line(void)
         {
             BleWifi_Ctrl_EventStatusSet(BLEWIFI_CTRL_EVENT_BIT_OFFLINE, false);
             BleWifi_Ctrl_EventStatusSet(BLEWIFI_CTRL_EVENT_BIT_NOT_CNT_SRV, false);
-            
+
             BleWifi_Ctrl_LedStatusChange();
 
             g_nHrlyPostRetry = 0;
             g_nType1_2_3_Retry_counter = 0;
-            
+
         }
         /*---------------------- Goter -----------------------------*/
 
@@ -846,20 +958,33 @@ int Sensor_Https_Post_On_Line(void)
             // keep alive is fail, retry it after POST_DATA_TIME_RETRY
             if (PostContentData.ContentType == TIMER_POST)
             {
-                if( g_nHrlyPostRetry < MAX_HOUR_RETRY_POST)
+                if (true == BleWifi_Ctrl_EventStatusGet(BLEWIFI_CTRL_EVENT_BIT_GOT_IP))
                 {
-                    printf("Hrly post failed , retry count is %d .....\n",g_nHrlyPostRetry);
-                    osTimerStop(g_tAppCtrlHourlyHttpPostRetryTimer);
-                    osTimerStart(g_tAppCtrlHourlyHttpPostRetryTimer, POST_DATA_TIME_RETRY);
-                    g_nHrlyPostRetry++;
-                }
-                else
-                {
-                    printf("BLEWIFI_CTRL_EVENT_BIT_OFFLINE retry count is %d \n",g_nHrlyPostRetry);
-                     /* When do wifi scan, set wifi auto connect is true */
                     BleWifi_Ctrl_EventStatusSet(BLEWIFI_CTRL_EVENT_BIT_OFFLINE, true);
+                    BleWifi_Ctrl_EventStatusSet(BLEWIFI_CTRL_EVENT_BIT_NOT_CNT_SRV, false);
                     BleWifi_Ctrl_LedStatusChange();
-                    g_nHrlyPostRetry = 0;
+                }
+
+                if(Sensor_Data_CheckEmpty() == SENSOR_DATA_OK)
+                {
+                    g_nHrlyPostRetry++;
+                    printf("Hrly post failed , retry count is %d .....\n",g_nHrlyPostRetry);
+
+                    if( g_nHrlyPostRetry < MAX_HOUR_RETRY_POST)
+                    {
+                        osTimerStop(g_tAppCtrlHourlyHttpPostRetryTimer);
+                        osTimerStart(g_tAppCtrlHourlyHttpPostRetryTimer, POST_DATA_TIME_RETRY);
+                    }
+                    else
+                    {
+                        /* When do wifi scan, set wifi auto connect is true */
+                        BleWifi_Ctrl_EventStatusSet(BLEWIFI_CTRL_EVENT_BIT_OFFLINE, false);
+                        BleWifi_Ctrl_EventStatusSet(BLEWIFI_CTRL_EVENT_BIT_NOT_CNT_SRV, false);
+                        BleWifi_Ctrl_LedStatusChange();
+
+                        printf("offline, retry count over\n");
+                        g_nHrlyPostRetry = 0;
+                    }
                 }
             }
             else
@@ -876,11 +1001,11 @@ int Sensor_Https_Post_On_Line(void)
                     printf("Type %d  post failed , retry count is %d .....\n",PostContentData.ContentType, g_nType1_2_3_Retry_counter);
 
                     if(g_nType1_2_3_Retry_counter < MAX_TYPE1_2_3_COUNT)
-                    { 
+                    {
                         osTimerStop(g_tAppCtrlType1_2_3_HttpPostRetryTimer);
                         osTimerStart(g_tAppCtrlType1_2_3_HttpPostRetryTimer, POST_DATA_TIME_RETRY);
                     }
-                    else 
+                    else
                     {
                         BleWifi_Ctrl_EventStatusSet(BLEWIFI_CTRL_EVENT_BIT_NOT_CNT_SRV, false);
                         BleWifi_Ctrl_LedStatusChange();
@@ -889,9 +1014,9 @@ int Sensor_Https_Post_On_Line(void)
                         g_nType1_2_3_Retry_counter = 0;
                     }
                 }
-                
+
             }
-                
+
             /*---------------------- Goter -----------------------------*/
             //Sensor_Data_ResetBuffer();
             // If wifi disconnect, then jump out while-loop.

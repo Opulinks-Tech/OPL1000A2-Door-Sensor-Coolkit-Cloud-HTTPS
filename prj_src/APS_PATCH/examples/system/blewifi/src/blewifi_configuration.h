@@ -37,7 +37,8 @@ RF Power
 | WIFI High power |  0xF0          | 0xFF           |
 '-----------------'----------------'----------------'
 */
-#define BLEWIFI_COM_RF_POWER_SETTINGS   (0x20)
+#define BLEWIFI_COM_RF_POWER_SETTINGS   (0x40)
+#define BLEWIFI_COM_RF_SMPS_SETTING     (2)     //0 : 1.2,  2 : 1.4    
 
 /*
 SNTP
@@ -188,8 +189,15 @@ if the auto connection is fail, the interval will be increased
 #define LED_TIME_NOT_CNT_SRV_ON_2   (100)
 #define LED_TIME_NOT_CNT_SRV_OFF_2  (700)
 
+#if 1   // 20200528, Terence change offline led as same as NOT_CNT_SRV
+#define LED_TIME_OFFLINE_ON_1   (100)
+#define LED_TIME_OFFLINE_OFF_1  (100)
+#define LED_TIME_OFFLINE_ON_2   (100)
+#define LED_TIME_OFFLINE_OFF_2  (700)
+#else
 #define LED_TIME_OFFLINE_ON         (1000)
 #define LED_TIME_OFFLINE_OFF        (1000)
+#endif
 
 #define LED_TIME_SHORT_PRESS_ON     (100)//Goter
 
@@ -197,12 +205,22 @@ if the auto connection is fail, the interval will be increased
 #define LED_TIME_BOOT_OFF_1         (100)//Goter
 #define LED_TIME_BOOT_ON_2          (100)//Goter
 
-
-
+#if 0
 /* Button Debounce time : unit: ms */
 #define TIMEOUT_DEBOUNCE_TIME        (30)      // 30 ms
 #define BLEWIFI_CTRL_KEY_PRESS_TIME  (5000)    // ms
 #define BLEWIFI_CTRL_BLEADVSTOP_TIME (180000)  // ms
+#endif
+
+/* BUTTON SENSOR Config */
+#define BLEWIFI_CTRL_BUTTON_SENSOR_EN               (1)
+#define BLEWIFI_CTRL_BUTTON_IO_PORT                 GPIO_IDX_04
+#define BLEWIFI_CTRL_BUTTON_PRESS_LEVEL             GPIO_LEVEL_LOW          // GPIO_LEVEL_HIGH | GPIO_LEVEL_LOW
+#define BLEWIFI_CTRL_BUTTON_TIMEOUT_DEBOUNCE_TIME   (30)      // 30 ms
+#define BLEWIFI_CTRL_BUTTON_PRESS_TIME              (5000)    // ms
+#define BLEWIFI_CTRL_BUTTON_RELEASE_COUNT_TIME      (800)     // ms
+
+#define BLEWIFI_CTRL_BLEADVSTOP_TIME                (180000)  // ms
 
 /* Door Debounce time : unit: ms */
 #define DOOR_DEBOUNCE_TIMEOUT        (200)     // 200ms

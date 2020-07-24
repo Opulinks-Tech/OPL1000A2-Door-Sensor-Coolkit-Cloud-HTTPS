@@ -11,6 +11,7 @@
 #ifndef __SENSOR_BUTTON_PRESS_H__
 #define __SENSOR_BUTTON_PRESS_H__
 
+#if 0
 #include "cmsis_os.h"
 #include "hal_vic.h"
 
@@ -22,5 +23,5 @@ extern uint32_t g_ulSoftTimerTickPre;  // store previous tick value ,
 extern uint32_t g_ulSoftTimerTickNow;  //system tick value by osKernaltick fun.
 
 void Sensor_ButtonPress_Init(void);
-
+#endif
 #endif // end of __SENSOR_BUTTON_PRESS_H__

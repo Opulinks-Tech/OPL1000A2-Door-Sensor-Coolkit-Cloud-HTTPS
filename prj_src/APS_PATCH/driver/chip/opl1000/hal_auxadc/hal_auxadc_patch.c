@@ -433,11 +433,11 @@ uint8_t Hal_Aux_AdcValueGet_patch(uint32_t *pulValue)
     ulRepeatCount = g_ulHalAux_AverageCount;
     for (j=0; j<ulRepeatCount; j++)
     {
-        // Trigger
-        tmp = RF->AUX_ADC_CK_GEN_CTL;
-        tmp &= ~(0x1 << 0);
-        tmp |= (0x1 << 0);
-        RF->AUX_ADC_CK_GEN_CTL = tmp;
+            // Trigger
+            tmp = RF->AUX_ADC_CK_GEN_CTL;
+            tmp &= ~(0x1 << 0);
+            tmp |= (0x1 << 0);
+            RF->AUX_ADC_CK_GEN_CTL = tmp;
 
         ulCurrentTick = Hal_Tick_Diff(0);
         do
@@ -519,8 +519,8 @@ uint8_t Hal_Aux_AdcValueGet_patch(uint32_t *pulValue)
 
     Hal_Aux_AdcUpdateCtrlReg(0);
 
-    *pulValue = (ulAdcValue + ((g_ulHalAux_AverageCount - AUXEqualZeroCounter) / 2)) / (g_ulHalAux_AverageCount - AUXEqualZeroCounter);
-    ubRet = HAL_AUX_OK;
+        *pulValue = (ulAdcValue + ((g_ulHalAux_AverageCount - AUXEqualZeroCounter) / 2)) / (g_ulHalAux_AverageCount - AUXEqualZeroCounter);
+        ubRet = HAL_AUX_OK;
 
 done:
     return ubRet;
@@ -545,7 +545,7 @@ uint32_t Hal_Aux_AdcCal_LoadTable( void )
 {
     uint32_t u32Res = 0;
     u32Res = Hal_Flash_AddrRead(SPI_IDX_0, AUXADC_FLASH_START_ADDR, 0, sizeof(sAuxadcCalTable), (uint8_t *)&sAuxadcCalTable);
-    
+
     if( u32Res != 0)
         return HAL_AUX_FAIL;
     else
@@ -673,15 +673,15 @@ void Hal_Aux_AdcCal_Init( void )
         else
         {
             if( u32Header != 0xFFFFFFFF)
-            {
+        {
                 // Any data in flash
                 Hal_Aux_AdcCal_LoadTable();
             }
-            else
-            {
+    else
+    {
                 // Empty data
-                Hal_Aux_AdcCal_LoadDef();
-            }
+        Hal_Aux_AdcCal_LoadDef();
+    }
         }
     }
     g_ubHalAux_Cal = 1;
@@ -837,7 +837,7 @@ uint8_t Hal_Aux_VbatGet_patch(float *pfVbat)
     uint8_t ubRet = HAL_AUX_FAIL;
 
     // check init
-    if (g_ubHalAux_Init != 1)
+    if(g_ubHalAux_Init != 1)
         return ubRet;
 
     // wait the semaphore

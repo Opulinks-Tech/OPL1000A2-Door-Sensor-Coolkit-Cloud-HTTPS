@@ -115,15 +115,6 @@ typedef struct
     uint8_t  u8aTemp[1];
 } T_AtSendParam;
 
-typedef struct
-{
-    char ubaDeviceId[DEVICE_ID_LEN];
-    char ubaApiKey[API_KEY_LEN];
-    char ubaWifiMac[CHIP_ID_LEN];
-    char ubaBleMac[CHIP_ID_LEN];
-    char ubaDeviceModel[MODEL_ID_LEN];
-} T_SendJSONParam;
-
 int app_at_cmd_sys_read_fim(char *buf, int len, int mode)
 {
     int iRet = 0;
@@ -924,7 +915,7 @@ int app_at_cmd_sys_send(char *buf, int len, int mode)
     done:
         if(iRet)
         {
-            msg_print_uart1(">\n");
+            msg_print_uart1(">\r\n");
         }
         else
         {
@@ -987,7 +978,7 @@ done:
 int app_at_cmd_sys_device_id(char *buf, int len, int mode)
 {
     int iRet = 0;
-    
+
     switch (mode)
     {
         case AT_CMD_MODE_READ:
@@ -1190,7 +1181,7 @@ int app_at_cmd_sys_wifi(char *buf, int len, int mode)
         Wifi_Conn_Start(argv[1], argv[2]);
         msg_print_uart1("OK\r\n");
     }
-    else 
+    else
     {
         msg_print_uart1("AT+SIGNAL=0\r\n");
     }
