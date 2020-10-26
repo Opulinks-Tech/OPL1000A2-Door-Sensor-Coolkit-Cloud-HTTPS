@@ -58,8 +58,10 @@ Head Block of The File
 
 #include "blewifi_app.h"
 #include "blewifi_configuration.h"
+#include "mw_fim_default_version_project.h"
 #include "mw_fim_default_group11_project.h"
 #include "mw_fim_default_group12_project.h"
+#include "mw_fim_default_group16_project.h"
 
 //#include "hal_wdt.h"
 // Sec 2: Constant Definitions, Imported Symbols, miscellaneous
@@ -146,11 +148,21 @@ void __Patch_EntryPoint(void)
     // update the switch AT UART / dbg UART function
     at_cmd_switch_uart1_dbguart = Main_AtUartDbgUartSwitch;
 
+#if 1
+    // modify the heap size, from g_ucaMemPartAddr to 0x44F000
+    uint32_t u32Addr = 0x438000;    // from .sct = SCT_PATCH_START + SCT_PATCH_LEN
+
+    g_ucaMemPartAddr = (uint8_t*) u32Addr;
+    g_ulMemPartTotalSize = 0x44F000 - u32Addr;
+
+    Sys_SetUnsuedSramEndBound(u32Addr);
+#else
     // modify the heap size, from 0x43C000 to 0x44F000
     g_ucaMemPartAddr = (uint8_t*) 0x438000;
     g_ulMemPartTotalSize = 0x17000;
 
     Sys_SetUnsuedSramEndBound(0x438000);
+#endif
 
     g_xaMemoryTable[4].ulBlockNum = 0;
     g_xaMemoryTable[5].ulBlockNum = 0;
@@ -229,11 +241,20 @@ static void Main_FlashLayoutUpdate(void)
     g_taMwFimZoneInfoTable[1].ulBaseAddr = 0x00090000;
     g_taMwFimZoneInfoTable[1].ulBlockNum = 9;
 
+    // Register FIM table
     MwFim_GroupInfoUpdate(1, 1, (T_MwFimFileInfo *)g_taMwFimGroupTable11_project);
-    MwFim_GroupVersionUpdate(1, 1, MW_FIM_VER11_PROJECT);
-
     MwFim_GroupInfoUpdate(1, 2, (T_MwFimFileInfo *)g_taMwFimGroupTable12_project);
+    MwFim_GroupInfoUpdate(1, 6, (T_MwFimFileInfo *)g_taMwFimGroupTable16_project);
+
+    // Update FIM Version
+    MwFim_GroupVersionUpdate(1, 1, MW_FIM_VER11_PROJECT);
     MwFim_GroupVersionUpdate(1, 2, MW_FIM_VER12_PROJECT);
+    MwFim_GroupVersionUpdate(1, 3, MW_FIM_VER13_PROJECT);
+    MwFim_GroupVersionUpdate(1, 4, MW_FIM_VER14_PROJECT);
+    MwFim_GroupVersionUpdate(1, 5, MW_FIM_VER15_PROJECT);
+    MwFim_GroupVersionUpdate(1, 6, MW_FIM_VER16_PROJECT);
+    MwFim_GroupVersionUpdate(1, 7, MW_FIM_VER17_PROJECT);
+    MwFim_GroupVersionUpdate(1, 8, MW_FIM_VER18_PROJECT);
 #endif
 }
 

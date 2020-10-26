@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include "cmsis_os.h"
 #include "event_loop.h"
+#include "blewifi_ctrl.h"
 #include "wifi_api.h"
 #include "wifi_event.h"
 #include "wifi_event_handler.h"
@@ -144,7 +145,7 @@ int ota_http_retrieve_offset(httpclient_t *client, httpclient_data_t *client_dat
         ret = httpclient_recv_response(client, client_data);
         if (ret < 0)
         {
-            LOG_E(TAG, "http client recv response error, ret = %d \r\n", ret);
+            LOG_E(TAG, "http client recv response error, ret = %d, errno = %d \r\n", ret, errno);
             return ret;
         }
         
@@ -189,7 +190,7 @@ int ota_http_retrieve_get(char* get_url, char* buf, uint32_t len)
     ret = httpclient_send_request(&g_fota_httpclient, get_url, HTTPCLIENT_GET, &client_data);
     if (ret < 0)
     {
-        LOG_E(TAG, "http client fail to send request \r\n");
+        LOG_E(TAG, "http client fail to send request, errno = %d \r\n", errno);
         return ret;
     }
     
@@ -199,7 +200,7 @@ int ota_http_retrieve_get(char* get_url, char* buf, uint32_t len)
     ret = ota_http_retrieve_offset(&g_fota_httpclient, &client_data, MW_OTA_HEADER_ADDR_1, 0);
     if (ret < 0)
     {
-        LOG_E(TAG, "http retrieve offset error, ret = %d \r\n", ret);
+        LOG_E(TAG, "http retrieve offset error, ret = %d, errno = %d \r\n", ret, errno);
         return ret;
     }
     
@@ -207,7 +208,7 @@ int ota_http_retrieve_get(char* get_url, char* buf, uint32_t len)
     ret = ota_http_retrieve_offset(&g_fota_httpclient, &client_data, MW_OTA_HEADER_ADDR_2, 1);
     if (ret < 0)
     {
-        LOG_E(TAG, "http retrieve offset error, ret = %d \r\n", ret);
+        LOG_E(TAG, "http retrieve offset error, ret = %d, errno = %d \r\n", ret, errno);
         return ret;
     }
     
@@ -215,7 +216,7 @@ int ota_http_retrieve_get(char* get_url, char* buf, uint32_t len)
     ret = ota_http_retrieve_offset(&g_fota_httpclient, &client_data, MW_OTA_IMAGE_ADDR_1, 0);
     if (ret < 0)
     {
-        LOG_E(TAG, "http retrieve offset error, ret = %d \r\n", ret);
+        LOG_E(TAG, "http retrieve offset error, ret = %d, errno = %d \r\n", ret, errno);
         return ret;
     }
     
@@ -227,8 +228,14 @@ int ota_http_retrieve_get(char* get_url, char* buf, uint32_t len)
         ret = httpclient_recv_response(&g_fota_httpclient, &client_data);
         if (ret < 0)
         {
-            LOG_E(TAG, "http client recv response error, ret = %d \r\n", ret);
+            LOG_E(TAG, "http client recv response error, ret = %d, errno = %d \r\n", ret, errno);
             return ret;
+        }
+        
+        if(false == BleWifi_Ctrl_EventStatusGet(BLEWIFI_CTRL_EVENT_BIT_OTA))
+        {
+            LOG_E(TAG, "ota_process_timeout fail\r\n");
+            return -3;
         }
         
         data_len = recv_temp - client_data.retrieve_len;
@@ -430,11 +437,12 @@ int ota_download_by_http(char *param)
         if (!ret)
         {
             LOG_I(TAG, "connect to http server");
+            g_fota_httpclient.timeout_ms = OTA_SOCKET_TIMEOUT;
             break;
         }
         else
         {
-            LOG_I(TAG, "connect to http server failed! retry again");
+            LOG_I(TAG, "connect to http server failed! retry again, errno = %d", errno);
             vTaskDelay(1000);
             retry_count++;
             continue;

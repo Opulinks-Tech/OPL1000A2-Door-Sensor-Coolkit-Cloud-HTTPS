@@ -16,14 +16,17 @@
 #include "mw_fim_default_group01.h"
 #include "lwip/errno.h"
 #include "sys_common_api_patch.h"
+#include "mbedtls/aes.h"
+#include "mbedtls/base64.h"
+#include "mbedtls/md5.h"
+#include "cmsis_os.h"
 
 #if (SNTP_FUNCTION_EN == 1)
-#include "cmsis_os.h"
 #include "lwip/netdb.h"
+#endif
 
 uint32_t g_ulSystemSecondInit;    // System Clock Time Initialize
 uint32_t g_ulSntpSecondInit;      // GMT Time Initialize
-#endif
 
 void BleWifi_HexDump(const char *title, const uint8_t *buf, size_t len)
 {
@@ -47,7 +50,6 @@ void BleWifi_HexDump(const char *title, const uint8_t *buf, size_t len)
 
 }
 
-#if (SNTP_FUNCTION_EN == 1)
 uint32_t BleWifi_CurrentSystemTimeGet(void)
 {
     uint32_t ulTick;
@@ -76,7 +78,14 @@ uint32_t BleWifi_CurrentSystemTimeGet(void)
     return ulsecond;
 }
 
-int BleWifi_SntpInit(void)
+void BleWifi_SntpInit(void)
+{
+    g_ulSntpSecondInit = SNTP_SEC_2019;     // Initialize the Sntp Value
+    g_ulSystemSecondInit = 0;               // Initialize System Clock Time
+}
+
+#if (SNTP_FUNCTION_EN == 1)
+int BleWifi_SntpUpdate(void)
 {
     int lRet = false;
     sntp_header_t sntp_h;
@@ -160,16 +169,16 @@ int BleWifi_SntpInit(void)
             }
 
             if ((nRet = read(sockfd, (char*) &sntp_h, sizeof(sntp_h)) ) < 0)
-            {           
+            {
                 printf("[SNTP] recvfrom failed ret is %d .\n",nRet);
                 printf(" [SNTP] getsockopt return errinfo = %d", error);
-                
+
                 if (errno == EWOULDBLOCK)
                 {
                     printf("sntp read timeout \n");
                 }
                 else
-           {
+                {
                     printf("sntp recv error\n");
                 }
                goto CloseSocket;
@@ -182,17 +191,17 @@ int BleWifi_SntpInit(void)
                pSntpTime = localtime(&rawtime);
                printf("Current time: %d-%d-%d %d:%d:%d\n", pSntpTime->tm_year + 1900, pSntpTime->tm_mon + 1, pSntpTime->tm_mday, pSntpTime->tm_hour, pSntpTime->tm_min, pSntpTime->tm_sec);
                lRet = true;
-                if (sockfd >= 0)
-                    close(sockfd);
+               if (sockfd >= 0)
+                   close(sockfd);
                break;
            }
         }
 
 CloseSocket:
-       retry++;
+        retry++;
         if (sockfd >= 0)
             close(sockfd);
-   }
+    }
 
 fail:
     if (res != NULL)
@@ -200,6 +209,7 @@ fail:
 
     return lRet;
 }
+#endif
 
 void BleWifi_SntpGet(struct tm *pSystemTime)
 {
@@ -231,8 +241,6 @@ time_t BleWifi_SntpGetRawData(void)
     return rawtime;
 }
 
-#endif
-
 /*
 Set RF power (0x00 - 0xFF)
 */
@@ -255,7 +263,7 @@ void BleWifi_RFPowerSetting(uint8_t level)
             printf("\r\nGroup 01 Write RF Power Value - ERROR\r\n");
         }
     }
-    
+
     sys_set_wifi_lowpower_tx_vdd_rf(BLEWIFI_COM_RF_SMPS_SETTING);
 
 #if 0
@@ -264,5 +272,136 @@ void BleWifi_RFPowerSetting(uint8_t level)
     ret = sys_set_config_rf_power_level(level);
     printf("RF Power Settings is = %s \n", (ret == 1 ? "successful":"false"));
 #endif
+}
+
+int BleWifi_CBC_encrypt(void *src , int len , unsigned char *iv , const unsigned char *key , void *out)
+{
+    int len1 = len & 0xfffffff0;
+    int len2 = len1 + 16;
+    int pad = len2 - len;
+    uint32_t u32Keybits = 128;
+    uint16_t i = 0;
+    uint16_t u16BlockNum = 0;
+    int ret = 0;
+    void * pTempSrcPos = src;
+    void * pTempOutPos = out;
+
+    if((pTempSrcPos == NULL) || (pTempOutPos == NULL))
+    {
+        return -1;
+    }
+    mbedtls_aes_context aes_ctx = {0};
+
+    mbedtls_aes_init(&aes_ctx);
+    mbedtls_aes_setkey_enc(&aes_ctx , key , u32Keybits);
+
+    if (len1) //execute encrypt for n-1 block
+    {
+        u16BlockNum = len >> 4 ;
+        for (i = 0; i < u16BlockNum ; ++i)
+        {
+            ret = mbedtls_aes_crypt_cbc(&aes_ctx , MBEDTLS_AES_ENCRYPT , AES_BLOCK_SIZE, iv , (unsigned char *)pTempSrcPos , (unsigned char *)pTempOutPos);
+            pTempSrcPos = ((char*)pTempSrcPos)+16;
+            pTempOutPos = ((char*)pTempOutPos)+16;
+        }
+    }
+    if (pad) //padding & execute encrypt for last block
+    {
+        char buf[16];
+        memcpy((char *)buf, (char *)src + len1, len - len1);
+        memset((char *)buf + len - len1, pad, pad);
+        ret = mbedtls_aes_crypt_cbc(&aes_ctx , MBEDTLS_AES_ENCRYPT , AES_BLOCK_SIZE, iv , (unsigned char *)buf , (unsigned char *)out + len1);
+    }
+    mbedtls_aes_free(&aes_ctx);
+
+    if(ret != 0)
+        return -1;
+    else
+        return 0;
+}
+
+int BleWifi_CBC_decrypt(void *src, int len , unsigned char *iv , const unsigned char *key, void *out)
+{
+    mbedtls_aes_context aes_ctx = {0};
+    int n = len >> 4;
+    char *out_c = NULL;
+    int offset = 0;
+    int ret = 0;
+    uint32_t u32Keybits = 128;
+    uint16_t u16BlockNum = 0;
+    char pad = 0;
+    void * pTempSrcPos = src;
+    void * pTempOutPos = out;
+    uint16_t i = 0;
+
+    if((pTempSrcPos == NULL) || (pTempOutPos == NULL))
+    {
+        return -1;
+    }
+
+    mbedtls_aes_init(&aes_ctx);
+    mbedtls_aes_setkey_dec(&aes_ctx , key , u32Keybits);
+
+    //decrypt n-1 block
+    u16BlockNum = n - 1;
+    if (n > 1)
+    {
+        for (i = 0; i < u16BlockNum ; ++i)
+        {
+            ret = mbedtls_aes_crypt_cbc(&aes_ctx , MBEDTLS_AES_DECRYPT , AES_BLOCK_SIZE, iv , (unsigned char *)pTempSrcPos , (unsigned char *)pTempOutPos);
+            pTempSrcPos = ((char*)pTempSrcPos)+16;
+            pTempOutPos = ((char*)pTempOutPos)+16;
+        }
+
+    }
+
+    out_c = (char *)out;
+    offset = n > 0 ? ((n - 1) << 4) : 0;
+    out_c[offset] = 0;
+
+    //decrypt last block
+    ret = mbedtls_aes_crypt_cbc(&aes_ctx , MBEDTLS_AES_DECRYPT , AES_BLOCK_SIZE, iv , (unsigned char *)src + offset , (unsigned char *)out_c + offset);
+
+    //paddind data set 0
+    pad = out_c[len - 1];
+    out_c[len - pad] = 0;
+
+    mbedtls_aes_free(&aes_ctx);
+
+    if(ret != 0)
+        return -1;
+    else
+        return 0;
+}
+
+int BleWifi_UUID_Generate(unsigned char *ucUuid , uint16_t u16BufSize)
+{
+    uint8_t i = 0;
+    uint8_t u8Random = 0;
+    if(u16BufSize < 36)
+    {
+        return false;
+    }
+    srand(osKernelSysTick());
+    for(i = 0; i<36 ; i++)
+    {
+        if((i == 8) || (i == 13) || (i == 18) || (i == 23))
+        {
+            ucUuid[i] = '-';
+        }
+        else
+        {
+            u8Random = rand()%16;
+            if(u8Random < 10)
+            {
+                ucUuid[i] = u8Random + '0';
+            }
+            else
+            {
+                ucUuid[i] = (u8Random - 10) + 'a';
+            }
+        }
+    }
+    return true;
 }
 

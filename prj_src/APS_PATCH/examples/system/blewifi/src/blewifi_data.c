@@ -39,6 +39,9 @@
 #include "iot_data.h"
 #include "sys_common_api.h"
 #include "app_at_cmd.h"
+#include "mbedtls/aes.h"
+#include "mbedtls/base64.h"
+#include "mbedtls/md5.h"
 
 #define HI_UINT16(a) (((a) >> 8) & 0xFF)
 #define LO_UINT16(a) ((a) & 0xFF)
@@ -47,7 +50,12 @@ uint8_t g_wifi_disconnectedDoneForAppDoWIFIScan = 1;   //Goter
 
 extern T_MwFim_GP12_HttpPostContent g_tHttpPostContent;
 extern T_MwFim_GP12_HttpHostInfo g_tHostInfo;
-
+extern uint8_t g_ubAppCtrlRequestRetryTimes;
+extern wifi_config_t wifi_config_req_connect;
+extern uint8_t g_u8ConnectTimeOutFlag;
+extern osTimerId g_tAppWifiConnectTimeOutTimerId;
+extern uint8_t g_bManuallyConnScanFlag;
+extern uint8_t g_u8ManuallyConnScanCnt;
 
 typedef struct {
     uint16_t total_len;
@@ -57,7 +65,12 @@ typedef struct {
 } blewifi_rx_packet_t;
 
 blewifi_rx_packet_t g_rx_packet = {0};
+unsigned char g_ucSecretKey[SECRETKEY_LEN + 1] = {0};
+unsigned char g_ucAppCode[UUID_SIZE + 1] = {0};
+unsigned char g_ucDeviceCode[UUID_SIZE + 1] = {0};
 
+static void BleWifi_Ble_ProtocolHandler_Auth(uint16_t type, uint8_t *data, int len);
+static void BleWifi_Ble_ProtocolHandler_AuthToken(uint16_t type, uint8_t *data, int len);
 static void BleWifi_Ble_ProtocolHandler_Scan(uint16_t type, uint8_t *data, int len);
 static void BleWifi_Ble_ProtocolHandler_Connect(uint16_t type, uint8_t *data, int len);
 static void BleWifi_Ble_ProtocolHandler_Disconnect(uint16_t type, uint8_t *data, int len);
@@ -99,15 +112,24 @@ static void BleWifi_Ble_ProtocolHandler_EngBleCloudInfoRead(uint16_t type, uint8
 
 static T_BleWifi_Ble_ProtocolHandlerTbl g_tBleProtocolHandlerTbl[] =
 {
+
+    {BLEWIFI_REQ_AUTH,                      BleWifi_Ble_ProtocolHandler_Auth},
+    {BLEWIFI_REQ_AUTH_TOKEN,                BleWifi_Ble_ProtocolHandler_AuthToken},
     {BLEWIFI_REQ_SCAN,                      BleWifi_Ble_ProtocolHandler_Scan},
     {BLEWIFI_REQ_CONNECT,                   BleWifi_Ble_ProtocolHandler_Connect},
+    {BLEWIFI_REQ_APP_DEVICE_INFO,           BleWifi_Ble_ProtocolHandler_AppDeviceInfo},
+    {BLEWIFI_REQ_APP_HOST_INFO,             BleWifi_Ble_ProtocolHandler_AppWifiConnection},
+    {BLEWIFI_REQ_MANUAL_CONNECT_AP,         BleWifi_Ble_ProtocolHandler_Manually_Connect_AP},
+
+    //{BLEWIFI_REQ_SCAN,                    BleWifi_Ble_ProtocolHandler_Scan},
+    //{BLEWIFI_REQ_CONNECT,                 BleWifi_Ble_ProtocolHandler_Connect},
     {BLEWIFI_REQ_DISCONNECT,                BleWifi_Ble_ProtocolHandler_Disconnect},
     {BLEWIFI_REQ_RECONNECT,                 BleWifi_Ble_ProtocolHandler_Reconnect},
     {BLEWIFI_REQ_READ_DEVICE_INFO,          BleWifi_Ble_ProtocolHandler_ReadDeviceInfo},
     {BLEWIFI_REQ_WRITE_DEVICE_INFO,         BleWifi_Ble_ProtocolHandler_WriteDeviceInfo},
     {BLEWIFI_REQ_WIFI_STATUS,               BleWifi_Ble_ProtocolHandler_WifiStatus},
     {BLEWIFI_REQ_RESET,                     BleWifi_Ble_ProtocolHandler_Reset},
-    {BLEWIFI_REQ_MANUAL_CONNECT_AP,         BleWifi_Ble_ProtocolHandler_Manually_Connect_AP},
+    //{BLEWIFI_REQ_MANUAL_CONNECT_AP,       BleWifi_Ble_ProtocolHandler_Manually_Connect_AP},
 
 #if (BLE_OTA_FUNCTION_EN == 1)
     {BLEWIFI_REQ_OTA_VERSION,               BleWifi_Ble_ProtocolHandler_OtaVersion},
@@ -137,11 +159,50 @@ static T_BleWifi_Ble_ProtocolHandlerTbl g_tBleProtocolHandlerTbl[] =
     {BLEWIFI_REQ_ENG_BLE_CLOUD_INFO_WRITE,  BleWifi_Ble_ProtocolHandler_EngBleCloudInfoWrite},
     {BLEWIFI_REQ_ENG_BLE_CLOUD_INFO_READ,   BleWifi_Ble_ProtocolHandler_EngBleCloudInfoRead},
 
-    {BLEWIFI_REQ_APP_DEVICE_INFO,           BleWifi_Ble_ProtocolHandler_AppDeviceInfo},
-    {BLEWIFI_REQ_APP_HOST_INFO,             BleWifi_Ble_ProtocolHandler_AppWifiConnection},
-
+    //{BLEWIFI_REQ_APP_DEVICE_INFO,         BleWifi_Ble_ProtocolHandler_AppDeviceInfo},
+    //{BLEWIFI_REQ_APP_HOST_INFO,           BleWifi_Ble_ProtocolHandler_AppWifiConnection},
     {0xFFFFFFFF,                            NULL}
 };
+
+static void BleWifi_Wifi_Scan_Check(wifi_scan_config_t *pstScan_config)
+{
+    g_wifi_disconnectedDoneForAppDoWIFIScan = 1;
+
+    BLEWIFI_INFO("BLEWIFI: Recv BLEWIFI_REQ_SCAN \r\n");
+    /*++++++++++++++++++++++ Goter ++++++++++++++++++++++++++++*/
+    if(true == BleWifi_Ctrl_EventStatusGet(BLEWIFI_CTRL_EVENT_BIT_WIFI_CONNECTING))
+    {
+        printf(" Postpone Do WIFI Scan Due to Auto Connect running IND \n");
+        g_wifi_disconnectedDoneForAppDoWIFIScan = 0;
+        int count = 0;
+        while(count < 100)
+        {
+            if(g_wifi_disconnectedDoneForAppDoWIFIScan == 1)
+            {
+                break;
+            }
+            else
+            {
+                count++;
+                osDelay(10);
+            }
+        }// wait event back
+        printf(" Postpone Do WIFI Scan Due to Auto Connect running END \n");
+    }
+    /*---------------------- Goter -----------------------------*/
+
+    if(g_wifi_disconnectedDoneForAppDoWIFIScan == 0)
+    {
+        return ;
+    }
+
+    if(false == BleWifi_Ctrl_EventStatusGet(BLEWIFI_CTRL_EVENT_BIT_WIFI_SCANNING))
+    {
+        BleWifi_Wifi_DoScan(pstScan_config);
+    }
+
+    g_ubAppCtrlRequestRetryTimes = BLEWIFI_CTRL_AUTO_CONN_STATE_IDLE;
+}
 
 #if (BLE_OTA_FUNCTION_EN == 1)
 static void BleWifi_OtaSendVersionRsp(uint8_t status, uint16_t pid, uint16_t cid, uint16_t fid)
@@ -473,12 +534,16 @@ static void BleWifi_AppDeviceInfoRsp()
     uint8_t ApiKeyLength = 0;
     uint8_t ChipIDLength = 0;
     uint8_t TotalSize = 0;
-
+    unsigned char ucCbcEncData[128];
+    size_t uCbcEncLen = 0;
+    unsigned char ucBaseData[128];
+    size_t uBaseLen = 0;
+    unsigned char iv[17]={0};
 
 
     DeviceIDLength =  strlen(g_tHttpPostContent.ubaDeviceId);
-    ApiKeyLength =  strlen(g_tHttpPostContent.ubaApiKey);
-    ChipIDLength =  strlen(g_tHttpPostContent.ubaChipId);
+    ApiKeyLength =  MAX_RSP_BASE64_API_KEY_LEN;
+    ChipIDLength =  MAX_RSP_BASE64_CHIP_ID_LEN;
 
     TotalSize = DeviceIDLength + ApiKeyLength + ChipIDLength + 3;
 
@@ -489,15 +554,28 @@ static void BleWifi_AppDeviceInfoRsp()
     memcpy(&data[len],  g_tHttpPostContent.ubaDeviceId, DeviceIDLength);
     len = len + DeviceIDLength;
 
-    memcpy(&data[len], &ApiKeyLength, 1);
+    memset(iv, '0' , IV_SIZE); //iv = "0000000000000000"
+    uCbcEncLen = strlen(g_tHttpPostContent.ubaApiKey);
+    uCbcEncLen = (((uCbcEncLen  >> 4) + 1) << 4);
+    BleWifi_CBC_encrypt((void *)g_tHttpPostContent.ubaApiKey , strlen(g_tHttpPostContent.ubaApiKey) , iv , g_ucSecretKey , (void *)ucCbcEncData);
+    mbedtls_base64_encode((unsigned char *)ucBaseData , 128  ,&uBaseLen ,(unsigned char *)ucCbcEncData , uCbcEncLen);
+    memcpy(&data[len], &uBaseLen, 1);
     len = len + 1;
-    memcpy(&data[len],  g_tHttpPostContent.ubaApiKey, ApiKeyLength);
-    len = len + ApiKeyLength;
+    memcpy(&data[len],  ucBaseData, uBaseLen);
+    len = len + uBaseLen;
 
-    memcpy(&data[len], &ChipIDLength, 1);
+    memset(ucCbcEncData , 0 , 128);
+    memset(ucBaseData , 0 , 128);
+    memset(iv, '0' , IV_SIZE); //iv = "0000000000000000"
+    uCbcEncLen = strlen(g_tHttpPostContent.ubaChipId);
+    uCbcEncLen = (((uCbcEncLen  >> 4) + 1) << 4);
+    BleWifi_CBC_encrypt((void *)g_tHttpPostContent.ubaChipId , strlen(g_tHttpPostContent.ubaChipId) , iv , g_ucSecretKey , (void *)ucCbcEncData);
+    mbedtls_base64_encode((unsigned char *)ucBaseData , 128  ,&uBaseLen ,(unsigned char *)ucCbcEncData , uCbcEncLen);
+    memcpy(&data[len], &uBaseLen, 1);
     len = len + 1;
-    memcpy(&data[len],  g_tHttpPostContent.ubaChipId, ChipIDLength);
-    len = len + ChipIDLength;
+    memcpy(&data[len],  ucBaseData, uBaseLen);
+    len = len + uBaseLen;
+
 
     BleWifi_Ble_DataSendEncap(BLEWIFI_RSP_APP_DEVICE_INFO, data, len);
 
@@ -567,6 +645,7 @@ static void BleWifi_AppWifiConnection(uint8_t *data, int len)
     BleWifi_Ctrl_EventStatusSet(BLEWIFI_CTRL_EVENT_BIT_CHANGE_HTTPURL, true);
 
     BleWifi_Ble_SendResponse(BLEWIFI_RSP_APP_HOST_INFO, 0);
+    osDelay(100);
     BleWifi_Ctrl_MsgSend(BLEWIFI_CTRL_MSG_NETWORKING_STOP, NULL, 0);
 
     Sensor_Data_Push(BleWifi_Ctrl_EventStatusGet(BLEWIFI_CTRL_EVENT_BIT_DOOR), SHORT_TRIG,  BleWifi_SntpGetRawData());
@@ -645,32 +724,98 @@ static void BleWifi_Eng_BleCmd(uint8_t *data, int len)
     BleWifi_Ble_SendResponse(BLEWIFI_RSP_ENG_BLE_CMD, 0);
 }
 
+static void BleWifi_Ble_ProtocolHandler_Auth(uint16_t type, uint8_t *data, int len)
+{
+    unsigned char iv[IV_SIZE] = {0};
+    unsigned char ucBase64Dec[MAX_AUTH_DATA_SIZE + 1] = {0};
+    size_t uBase64DecLen = 0;
+    unsigned char ucUuidEncData[UUID_ENC_SIZE + 1] = {0};
+    unsigned char ucUuidtoBaseData[ENC_UUID_TO_BASE64_SIZE + 1] = {0};  // to base64 max size ((4 * n / 3) + 3) & ~3
+    size_t uBase64EncLen = 0;
+
+    BLEWIFI_INFO("BLEWIFI: Recv BLEWIFI_REQ_AUTH \r\n");
+
+    if(len > MAX_AUTH_DATA_SIZE)
+    {
+        uBase64EncLen = 0;
+        BleWifi_Ble_DataSendEncap(BLEWIFI_RSP_AUTH, ucUuidtoBaseData , uBase64EncLen);
+        return ;
+    }
+
+    mbedtls_md5((unsigned char *)&g_tHttpPostContent.ubaApiKey , strlen(g_tHttpPostContent.ubaApiKey) , g_ucSecretKey);
+
+    mbedtls_base64_decode(ucBase64Dec , MAX_AUTH_DATA_SIZE + 1 , &uBase64DecLen , (unsigned char *)data , len);
+    memset(iv, '0' , IV_SIZE); //iv = "0000000000000000"
+    BleWifi_CBC_decrypt((void *)ucBase64Dec , uBase64DecLen , iv , g_ucSecretKey , g_ucAppCode);
+
+    printf("g_ucAppCode = %s\r\n",g_ucAppCode);
+
+    //UUID generate
+    memset(g_ucDeviceCode , 0 , UUID_SIZE);
+    if(BleWifi_UUID_Generate(g_ucDeviceCode , (UUID_SIZE + 1)) == false)
+    {
+        uBase64EncLen = 0;
+        BleWifi_Ble_DataSendEncap(BLEWIFI_RSP_AUTH, ucUuidtoBaseData , uBase64EncLen);
+        return ;
+    }
+
+    printf("g_ucDeviceCode = %s\r\n",g_ucDeviceCode);
+
+    memset(iv, '0' , IV_SIZE); //iv = "0000000000000000"
+    BleWifi_CBC_encrypt((void *)g_ucDeviceCode , UUID_SIZE , iv , g_ucSecretKey , (void *)ucUuidEncData);
+    mbedtls_base64_encode((unsigned char *)ucUuidtoBaseData , ENC_UUID_TO_BASE64_SIZE + 1  ,&uBase64EncLen ,(unsigned char *)ucUuidEncData , UUID_ENC_SIZE);
+
+    //BLEWIFI_INFO("ucUuidtoBaseData = %s\r\n",ucUuidtoBaseData);
+
+    BleWifi_Ble_DataSendEncap(BLEWIFI_RSP_AUTH, ucUuidtoBaseData , uBase64EncLen);
+}
+
+static void BleWifi_Ble_ProtocolHandler_AuthToken(uint16_t type, uint8_t *data, int len)
+{
+    unsigned char iv[IV_SIZE + 1] = {0};
+    unsigned char ucBase64Dec[MAX_AUTH_TOKEN_DATA_SIZE + 1] = {0};
+    size_t uBase64DecLen = 0;
+    unsigned char ucCbcDecData[MAX_AUTH_TOKEN_DATA_SIZE + 1] = {0};
+    uint8_t u8Ret = 0; // 0 success , 1 fail
+    char * pcToken = NULL;
+
+    BLEWIFI_INFO("BLEWIFI: Recv BLEWIFI_REQ_AUTH_TOKEN \r\n");
+
+    if(len > MAX_AUTH_TOKEN_DATA_SIZE)
+    {
+        BleWifi_Ble_SendResponse(BLEWIFI_RSP_AUTH_TOKEN , u8Ret);
+        return;
+    }
+
+    mbedtls_base64_decode(ucBase64Dec , MAX_AUTH_TOKEN_DATA_SIZE + 1 , &uBase64DecLen , (unsigned char *)data , len);
+    memset(iv, '0' , IV_SIZE); //iv = "0000000000000000"
+    BleWifi_CBC_decrypt((void *)ucBase64Dec , uBase64DecLen , iv , g_ucSecretKey , ucCbcDecData);
+
+    printf("ucCbcDecData = %s\r\n",ucCbcDecData);
+
+    pcToken = strtok((char *)ucCbcDecData , "_");
+    if(strcmp(pcToken ,(char *)g_ucAppCode) != 0)
+    {
+        u8Ret = 1;
+    }
+    pcToken = strtok(NULL , "_");
+    if(strcmp(pcToken ,(char *)g_ucDeviceCode) != 0)
+    {
+        u8Ret = 1;
+    }
+
+    BleWifi_Ble_SendResponse(BLEWIFI_RSP_AUTH_TOKEN , u8Ret);
+}
+
 static void BleWifi_Ble_ProtocolHandler_Scan(uint16_t type, uint8_t *data, int len)
 {
-    BLEWIFI_INFO("BLEWIFI: Recv BLEWIFI_REQ_SCAN \r\n");
-    /*++++++++++++++++++++++ Goter ++++++++++++++++++++++++++++*/
-    if (true != BleWifi_Ctrl_EventStatusGet(BLEWIFI_CTRL_EVENT_BIT_GOT_IP))  //if not get IP , state always is disconnected
-    {
-        printf(" Postpone Do WIFI Scan Due to Auto Connect running IND \n");
-        g_wifi_disconnectedDoneForAppDoWIFIScan = 0;
-        wifi_connection_disconnect_ap();
-        int count = 0;
-        while(count < 100)
-        {
-            if(g_wifi_disconnectedDoneForAppDoWIFIScan == 1)
-            {
-                break;
-            }
-            else
-            {
-                count++;
-                osDelay(10);
-            }
-        }// wait event back
-        printf(" Postpone Do WIFI Scan Due to Auto Connect running END \n");
-    }
-    /*---------------------- Goter -----------------------------*/
-    BleWifi_Wifi_DoScan(data, len);
+    wifi_scan_config_t scan_config = {0};
+
+    scan_config.show_hidden = data[0];
+    scan_config.scan_type = WIFI_SCAN_TYPE_MIX;
+
+    BleWifi_Wifi_Scan_Check(&scan_config);
+
 }
 
 static void BleWifi_Ble_ProtocolHandler_Connect(uint16_t type, uint8_t *data, int len)
@@ -681,8 +826,89 @@ static void BleWifi_Ble_ProtocolHandler_Connect(uint16_t type, uint8_t *data, in
 
 static void BleWifi_Ble_ProtocolHandler_Manually_Connect_AP(uint16_t type, uint8_t *data, int len)
 {
+    unsigned char ucDecPassword[BLEWIFI_WIFI_MAX_REC_PASSWORD_SIZE + 1] = {0};
+    unsigned char iv[IV_SIZE + 1] = {0};
+    size_t u16DecPasswordLen = 0;
+    uint8_t u8PasswordLen = 0;
+    uint8_t u8TimeOutSettings;
+    wifi_scan_config_t scan_config = {0};
+
     BLEWIFI_INFO("BLEWIFI: Recv BLEWIFI_REQ_MANUAL_CONNECT_AP \r\n");
-    BleWifi_Wifi_ManuallyConnectAP(data, len);
+
+    memset(&wifi_config_req_connect , 0 ,sizeof(wifi_config_t));
+
+    BLEWIFI_INFO("BLEWIFI: Recv Connect Request\r\n");
+
+
+    // data format for connecting a hidden AP
+    //--------------------------------------------------------------------------------------
+    //|        1     |    1~32    |    1      |     1    |         1          |   8~63     |
+    //--------------------------------------------------------------------------------------
+    //| ssid length  |    ssid    | Connected |  timeout |   password_length  |   password |
+    //--------------------------------------------------------------------------------------
+
+    wifi_config_req_connect.sta_config.ssid_length = data[0];
+
+    memcpy(wifi_config_req_connect.sta_config.ssid, &data[1], data[0]);
+    BLEWIFI_INFO("\r\n %d  Recv Connect Request  SSID is %s\r\n",__LINE__, wifi_config_req_connect.sta_config.ssid);
+
+    if (len >= (1 +data[0] +1 +1 +1) ) // ssid length(1) + ssid (data(0)) + Connected(1) + timeout + password_length (1)
+    {
+        BLEWIFI_INFO(" \r\n Do Manually connect %d \r\n ",__LINE__);
+
+        u8TimeOutSettings = data[data[0] + 2];
+        if(u8TimeOutSettings <= BLEWIFI_WIFI_DEFAULT_TIMEOUT) //set timeout
+        {
+            g_ubAppCtrlRequestRetryTimes = BLEWIFI_WIFI_REQ_CONNECT_RETRY_TIMES;
+            g_u8ConnectTimeOutFlag = 1;
+        }
+        else
+        {
+            osTimerStop(g_tAppWifiConnectTimeOutTimerId);
+            osTimerStart(g_tAppWifiConnectTimeOutTimerId, u8TimeOutSettings - BLEWIFI_WIFI_DEFAULT_TIMEOUT);
+        }
+
+        u8PasswordLen = data[data[0] + 3];
+        if(u8PasswordLen == 0) //password len = 0
+        {
+            printf("password_length = 0\r\n");
+            wifi_config_req_connect.sta_config.password_length = 0;
+            memset((char *)wifi_config_req_connect.sta_config.password, 0 , WIFI_LENGTH_PASSPHRASE);
+        }
+        else
+        {
+            if(u8PasswordLen > BLEWIFI_WIFI_MAX_REC_PASSWORD_SIZE)
+            {
+                BLEWIFI_INFO(" \r\n Not do Manually connect %d \r\n ",__LINE__);
+                BleWifi_Ble_SendResponse(BLEWIFI_RSP_CONNECT, BLEWIFI_WIFI_PASSWORD_FAIL);
+                return;
+            }
+            mbedtls_base64_decode(ucDecPassword , BLEWIFI_WIFI_MAX_REC_PASSWORD_SIZE + 1 , &u16DecPasswordLen , (unsigned char *)&data[data[0] + 4] , u8PasswordLen);
+            memset(iv, '0' , IV_SIZE); //iv = "0000000000000000"
+            BleWifi_CBC_decrypt((void *)ucDecPassword , u16DecPasswordLen , iv , g_ucSecretKey , (void *)wifi_config_req_connect.sta_config.password);
+            wifi_config_req_connect.sta_config.password_length = strlen((char *)wifi_config_req_connect.sta_config.password);
+            //printf("password = %s\r\n" , wifi_config_req_connect.sta_config.password);
+            //printf("password_length = %u\r\n" , wifi_config_req_connect.sta_config.password_length);
+        }
+
+        g_bManuallyConnScanFlag = true;
+        g_u8ManuallyConnScanCnt = 1;
+
+        scan_config.show_hidden = data[0];
+        scan_config.scan_type = WIFI_SCAN_TYPE_MIX;
+        //printf("wifi_config_req_connect.sta_config.ssid = %s\r\n",wifi_config_req_connect.sta_config.ssid);
+        //printf("wifi_config_req_connect.sta_config.ssid_length = %u\r\n",wifi_config_req_connect.sta_config.ssid_length);
+
+        memcpy(scan_config.ssid , wifi_config_req_connect.sta_config.ssid , wifi_config_req_connect.sta_config.ssid_length);
+
+        BleWifi_Wifi_Scan_Check(&scan_config);
+
+    }
+    else
+    {
+        BLEWIFI_INFO(" \r\n Not do Manually connect %d \r\n ",__LINE__);
+        BleWifi_Ble_SendResponse(BLEWIFI_RSP_CONNECT, BLEWIFI_WIFI_CONNECTED_FAIL);
+    }
 }
 
 

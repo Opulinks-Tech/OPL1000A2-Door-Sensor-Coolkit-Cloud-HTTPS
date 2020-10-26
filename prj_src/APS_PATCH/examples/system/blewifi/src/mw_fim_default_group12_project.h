@@ -49,8 +49,6 @@ Declaration of data structure
 ******************************/
 // Sec 3: structure, uniou, enum, linked list
 
-#define MW_FIM_VER12_PROJECT 0x07    // 0x00 ~ 0xFF
-
 #define API_KEY_LEN     (68)
 #define DEVICE_ID_LEN   (44)
 #define CHIP_ID_LEN     (20)

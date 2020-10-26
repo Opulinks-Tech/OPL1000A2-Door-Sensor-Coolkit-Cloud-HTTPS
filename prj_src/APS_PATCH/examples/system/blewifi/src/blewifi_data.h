@@ -25,6 +25,15 @@
 
 #define DELIMITER_NUM (4)  // The total count of ',' in colud info data.
 #define RSP_CLOUD_INFO_READ_PAYLOAD_SIZE (DEVICE_ID_LEN+API_KEY_LEN+CHIP_ID_LEN+CHIP_ID_LEN+MODEL_ID_LEN + DELIMITER_NUM + 1)
+#define MAX_AUTH_DATA_SIZE (64) // CBC(UUID(36)) = 48 , BASE64(CBC(UUID(36))) = 64
+#define MAX_AUTH_TOKEN_DATA_SIZE (108) // CBC(UUID(36) + "_"(1) + UUID(36)) = 80 , BASE(80) = 108
+#define UUID_SIZE (36)  // 8-4-4-4-12
+#define SECRETKEY_LEN (16)
+#define IV_SIZE (16)
+#define UUID_ENC_SIZE (48)  // CBC(UUID(36)) = 48
+#define ENC_UUID_TO_BASE64_SIZE (64)  //base64 max size ((4 * n / 3) + 3) & ~3
+#define MAX_RSP_BASE64_API_KEY_LEN (108) //BASE(80) = 108
+#define MAX_RSP_BASE64_CHIP_ID_LEN (44) //BASE(32) = 44
 
 enum
 {
@@ -40,15 +49,33 @@ enum
 };
 
 typedef enum {
-    BLEWIFI_REQ_SCAN                            = 0x0,          // Wifi scan
-    BLEWIFI_REQ_CONNECT                         = 0x1,          // Wifi connect
-    BLEWIFI_REQ_DISCONNECT                      = 0x2,          // Wifi disconnect
-    BLEWIFI_REQ_RECONNECT                       = 0x3,          // Wifi reconnect
-    BLEWIFI_REQ_READ_DEVICE_INFO                = 0x4,          // Wifi read device information
-    BLEWIFI_REQ_WRITE_DEVICE_INFO               = 0x5,          // Wifi write device information
-    BLEWIFI_REQ_WIFI_STATUS                     = 0x6,          // Wifi read AP status
-    BLEWIFI_REQ_RESET                           = 0x7,          // Wifi reset AP
-	BLEWIFI_REQ_MANUAL_CONNECT_AP               = 0x8,          // Wifi connect AP by manual
+
+    BLEWIFI_REQ_AUTH                            = 0x0,  // auth
+    BLEWIFI_RSP_AUTH                            = 0x1,  //
+    BLEWIFI_REQ_AUTH_TOKEN                      = 0x2,  // Wifi scan
+    BLEWIFI_RSP_AUTH_TOKEN                      = 0x3,  // Wifi scan
+    BLEWIFI_REQ_SCAN                            = 0x4,  // Wifi scan
+    BLEWIFI_RSP_SCAN_REPORT                     = 0x5,
+    BLEWIFI_RSP_SCAN_END                        = 0x6,
+    BLEWIFI_REQ_CONNECT                         = 0x7,  // Wifi connect
+    BLEWIFI_RSP_CONNECT                         = 0x8,
+    BLEWIFI_REQ_APP_DEVICE_INFO                 = 0x9,  //for CKS
+    BLEWIFI_RSP_APP_DEVICE_INFO                 = 0xA,  //for CKS
+    BLEWIFI_REQ_APP_HOST_INFO                   = 0xB,  //for CKS
+    BLEWIFI_RSP_APP_HOST_INFO                   = 0xC,  //for CKS
+    BLEWIFI_REQ_MANUAL_CONNECT_AP               = 0xD,  // Wifi connect AP by manual
+    BLEWIFI_IND_IP_STATUS_NOTIFY                = 0xE,  // Wifi notify AP status
+
+    ////////////  Unused ble cmd type Start
+    //BLEWIFI_REQ_SCAN                          = 0x3000,          // Wifi scan
+    //BLEWIFI_REQ_CONNECT                       = 0x3001,          // Wifi connect
+    BLEWIFI_REQ_DISCONNECT                      = 0x3002,          // Wifi disconnect
+    BLEWIFI_REQ_RECONNECT                       = 0x3003,          // Wifi reconnect
+    BLEWIFI_REQ_READ_DEVICE_INFO                = 0x3004,          // Wifi read device information
+    BLEWIFI_REQ_WRITE_DEVICE_INFO               = 0x3005,          // Wifi write device information
+    BLEWIFI_REQ_WIFI_STATUS                     = 0x3006,          // Wifi read AP status
+    BLEWIFI_REQ_RESET                           = 0x3007,          // Wifi reset AP
+    //BLEWIFI_REQ_MANUAL_CONNECT_AP             = 0x3008,          // Wifi connect AP by manual
 
     BLEWIFI_REQ_OTA_VERSION                     = 0x100,        // Ble OTA
     BLEWIFI_REQ_OTA_UPGRADE                     = 0x101,        // Ble OTA
@@ -83,12 +110,12 @@ typedef enum {
     BLEWIFI_REQ_ENG_BLE_CLOUD_INFO_READ         = 0x611,
 
     BLEWIFI_REQ_APP_START                       = 0x800,
-    BLEWIFI_REQ_APP_DEVICE_INFO                 = 0x801,  //for CKS
-    BLEWIFI_REQ_APP_HOST_INFO                   = 0x802,  //for CKS
+    //BLEWIFI_REQ_APP_DEVICE_INFO               = 0x801,  //for CKS
+    //BLEWIFI_REQ_APP_HOST_INFO                 = 0x802,  //for CKS
 
-    BLEWIFI_RSP_SCAN_REPORT                     = 0x1000,
-    BLEWIFI_RSP_SCAN_END                        = 0x1001,
-    BLEWIFI_RSP_CONNECT                         = 0x1002,
+    //BLEWIFI_RSP_SCAN_REPORT                   = 0x1000,
+    //BLEWIFI_RSP_SCAN_END                      = 0x1001,
+    //BLEWIFI_RSP_CONNECT                       = 0x1002,
     BLEWIFI_RSP_DISCONNECT                      = 0x1003,
     BLEWIFI_RSP_RECONNECT                       = 0x1004,
     BLEWIFI_RSP_READ_DEVICE_INFO                = 0x1005,
@@ -129,10 +156,11 @@ typedef enum {
     BLEWIFI_RSP_ENG_BLE_CLOUD_INFO_READ         = 0x1611,
 
     BLEWIFI_RSP_APP_START                       = 0x1800,
-    BLEWIFI_RSP_APP_DEVICE_INFO                 = 0x1801,  //for CKS
-    BLEWIFI_RSP_APP_HOST_INFO                   = 0x1802,  //for CKS
+    //BLEWIFI_RSP_APP_DEVICE_INFO               = 0x1801,  //for CKS
+    //BLEWIFI_RSP_APP_HOST_INFO                 = 0x1802,  //for CKS
 
-    BLEWIFI_IND_IP_STATUS_NOTIFY                = 0x2000,  // Wifi notify AP status
+    //BLEWIFI_IND_IP_STATUS_NOTIFY              = 0x2000,  // Wifi notify AP status
+    ////////////  Unused ble cmd type End
 
     BLEWIFI_TYPE_END                            = 0xFFFF
 }blewifi_type_id_e;

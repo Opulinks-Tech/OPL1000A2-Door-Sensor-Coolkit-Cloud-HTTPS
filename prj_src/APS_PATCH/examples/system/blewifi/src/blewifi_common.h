@@ -14,9 +14,7 @@
 
 #include "msg.h"
 #include "blewifi_configuration.h"
-#if (SNTP_FUNCTION_EN == 1)
 #include <time.h>
-#endif
 
 //#define BLEWIFI_SHOW_INFO
 //#define BLEWIFI_SHOW_DUMP
@@ -40,7 +38,13 @@
 #define MAC2STR(a) (a)[0], (a)[1], (a)[2], (a)[3], (a)[4], (a)[5]
 #define MACSTR "%02x:%02x:%02x:%02x:%02x:%02x"
 
+#define AES_BLOCK_SIZE (16) //for CBC
+
 void BleWifi_HexDump(const char *title, const uint8_t *buf, size_t len);
+
+#define SNTP_SEC_1970           (2208988800)                                    /* 1970 - 1900 in seconds */
+#define SNTP_SEC_2019           (3755260800)                                    /* 2019 - 1900 in seconds */
+#define SNTP_CONVERT_TIME(s)    ((s) - SNTP_SEC_1970 + 3600 * SNTP_TIME_ZONE)   /* Current time - 1970 + time zone */
 
 #if (SNTP_FUNCTION_EN == 1)
 /*
@@ -64,10 +68,6 @@ typedef struct {
     int32_t trantimefraction;
 } sntp_header_t;
 
-#define SNTP_SEC_1970           (2208988800)                                    /* 1970 - 1900 in seconds */
-#define SNTP_SEC_2019           (3755260800)                                    /* 2019 - 1900 in seconds */
-#define SNTP_CONVERT_TIME(s)    ((s) - SNTP_SEC_1970 + 3600 * SNTP_TIME_ZONE)   /* Current time - 1970 + time zone */ 
-
 /*
 tm Data Structure
 +----------+------+---------------------------+-------+
@@ -85,14 +85,16 @@ tm Data Structure
 +----------+------+---------------------------+-------+
 */
 
-int BleWifi_SntpInit(void);
-void BleWifi_SntpGet(struct tm *pSystemTime);
-time_t BleWifi_SntpGetRawData(void);
-
-extern uint32_t g_ulSystemSecondInit;    // System Clock Time
-extern uint32_t g_ulSntpSecondInit;      // GMT Time
+int BleWifi_SntpUpdate(void);
 #endif
 
+void BleWifi_SntpInit(void);
+void BleWifi_SntpGet(struct tm *pSystemTime);
+time_t BleWifi_SntpGetRawData(void);
 void BleWifi_RFPowerSetting(uint8_t level);
+int BleWifi_CBC_encrypt(void *src , int len , unsigned char *iv , const unsigned char *key , void *out);
+int BleWifi_CBC_decrypt(void *src, int len , unsigned char *iv , const unsigned char *key, void *out);
+int BleWifi_UUID_Generate(unsigned char *ucUuid , uint16_t u16BufSize);
+
 
 #endif  // end of __BLEWIFI_COMMON_H__

@@ -15,6 +15,8 @@
 #include <string.h>
 #include <time.h> // This is for time_t
 
+#define HTTPS_IDLE_TIMEOUT  (180000)
+
 #define BUFFER_SIZE 2048
 
 #define BUFFER_SIZE_128 128
@@ -31,7 +33,11 @@ typedef struct {
 
 extern unsigned char g_uwSHA256_Buff[BUFFER_SIZE];
 
+#if 1   // Terence, implement new retry flow
+int Sensor_Https_Post(unsigned char *post_data, int len, int isDestroy_if_post_fail);
+#else
 int Sensor_Https_Post(unsigned char *post_data, int len);
+#endif
 int Sensor_Https_Post_On_Line(void);
 void UpdateBatteryContent(void);
 

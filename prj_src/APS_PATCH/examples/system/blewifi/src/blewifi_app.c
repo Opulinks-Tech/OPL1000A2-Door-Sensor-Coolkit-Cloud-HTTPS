@@ -28,24 +28,19 @@
 #include "ps_public.h"
 #include "mw_fim_default_group03.h"
 #include "mw_fim_default_group03_patch.h"
-#include "mw_fim_default_group11_project.h"
 #include "app_at_cmd.h"
 #include "at_cmd_task_patch.h"
 #include "at_cmd_common.h"
+#include "wifi_api.h"
+#include "hal_auxadc_patch.h"
+#include "ps_patch.h"
 
 blewifi_ota_t *gTheOta = 0;
 
 void BleWifiAppInit(void)
 {
     T_MwFim_SysMode tSysMode;
-    T_MwFim_GP11_PowerSaving tPowerSaving;
-
 	gTheOta = 0;
-
-#if (SNTP_FUNCTION_EN == 1)
-    g_ulSntpSecondInit = SNTP_SEC_2019;     // Initialize the Sntp Value
-    g_ulSystemSecondInit = 0;               // Initialize System Clock Time
-#endif
 
     // get the settings of system mode
 	if (MW_FIM_OK != MwFim_FileRead(MW_FIM_IDX_GP03_PATCH_SYS_MODE, 0, MW_FIM_SYS_MODE_SIZE, (uint8_t*)&tSysMode))
@@ -54,21 +49,24 @@ void BleWifiAppInit(void)
         memcpy(&tSysMode, &g_tMwFimDefaultSysMode, MW_FIM_SYS_MODE_SIZE);
     }
 
-    // get the settings of power saving
-	if (MW_FIM_OK != MwFim_FileRead(MW_FIM_IDX_GP11_PROJECT_POWER_SAVING, 0, MW_FIM_GP11_POWER_SAVING_SIZE, (uint8_t*)&tPowerSaving))
-    {
-        // if fail, get the default value
-        memcpy(&tPowerSaving, &g_tMwFimDefaultGp11PowerSaving, MW_FIM_GP11_POWER_SAVING_SIZE);
-    }
-
     if ((tSysMode.ubSysMode == MW_FIM_SYS_MODE_MP) || (tSysMode.ubSysMode == MW_FIM_SYS_MODE_INIT))
     {
         set_echo_on(false);
     }
 
+    if(tSysMode.ubSysMode == MW_FIM_SYS_MODE_USER)
+    {
+        ps_32k_xtal_measure(1000);
+    }
     // only for the user mode
     if ((tSysMode.ubSysMode == MW_FIM_SYS_MODE_INIT) || (tSysMode.ubSysMode == MW_FIM_SYS_MODE_USER))
     {
+        /* Aux ADC calibration Initialization */
+        Hal_Aux_AdcCal_Init();
+
+        /* SNTP Initialization */
+        BleWifi_SntpInit();
+
         /* Wi-Fi Initialization */
         BleWifi_Wifi_Init();
 
@@ -88,13 +86,9 @@ void BleWifiAppInit(void)
         Iot_Data_Init();
         #endif
 
-        // move the settings to blewifi_ctrl, when the sys status is changed from Init to Noraml
-        /* Power saving settings */
-        //if (tSysMode.ubSysMode == MW_FIM_SYS_MODE_USER)
-        //    ps_smart_sleep(tPowerSaving.ubPowerSaving);
-
         /* RF Power settings */
         BleWifi_RFPowerSetting(BLEWIFI_COM_RF_POWER_SETTINGS);
+
     }
 
     // update the system mode

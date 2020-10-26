@@ -87,7 +87,7 @@ void lwip_tcpip_init_patch(void)
 #ifdef WIFI_RX_DATA_USE_IPC
     wifi_mac_register_rxcb(&netif, lwip_wlan_sta_input);
 #endif
-    
+
     netif_set_up(&netif);
 
     //netif_set_link_callback(&netif, lwip_netif_link_irq);

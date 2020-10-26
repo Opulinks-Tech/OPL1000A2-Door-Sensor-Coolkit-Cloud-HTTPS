@@ -95,7 +95,7 @@ typedef struct {
     uint8_t  bssid[WIFI_MAC_ADDRESS_LENGTH];          /**< AP's MAC address. */
     unsigned long   IP;                               /**< Device's IP. */
     unsigned long   mask;                             /**< Device's Mask. */
-    unsigned long   Gateway;                          /**< Device's Gateway. */     
+    unsigned long   Gateway;                          /**< Device's Gateway. */
     unsigned long   DNS;                              /**< Device's DNS. */
 }__attribute__((packed)) blewifi_wifi_status_info_t;
 
@@ -108,15 +108,21 @@ typedef struct
 
 #define BLEWIFI_WIFI_CONNECTED_DONE     0
 #define BLEWIFI_WIFI_CONNECTED_FAIL     1
+#define BLEWIFI_WIFI_PASSWORD_FAIL      2
+#define BLEWIFI_WIFI_AP_NOT_FOUND       3
+#define BLEWIFI_WIFI_CONNECT_TIMEOUT    4
+
 #define BLEWIFI_WIFI_DISCONNECTED_DONE  0
 #define BLEWIFI_WIFI_DISCONNECTED_FAIL  1
 
-#define ATWIFI_CNT_FAILED_RETRY 10  
+#define ATWIFI_CNT_FAILED_RETRY 10
 
+#define BLEWIFI_WIFI_MAX_REC_PASSWORD_SIZE (108) // WIFI_LENGTH_PASSPHRASE = 64  CBC(64)= 80  BASE64(80) = 108
+#define BLEWIFI_WIFI_DEFAULT_TIMEOUT   (8)
 
-void BleWifi_Wifi_DoScan(uint8_t *data, int len);
+void BleWifi_Wifi_DoScan(wifi_scan_config_t *pstScan_config);
 void BleWifi_Wifi_DoConnect(uint8_t *data, int len);
-void BleWifi_Wifi_ManuallyConnectAP(uint8_t *data, int len);
+void BleWifi_Wifi_ManuallyConnectAP(wifi_config_t *pstWifi_config_req_connect);
 void BleWifi_Wifi_DoDisconnect(void);
 void BleWifi_Wifi_ReadDeviceInfo(void);
 void BleWifi_Wifi_WriteDeviceInfo(uint8_t *data, int len);
@@ -133,7 +139,7 @@ void BleWifi_Wifi_ReqConnectRetry(void);
 int BleWifi_Wifi_Rssi(int8_t *rssi);
 int BleWifi_Wifi_SetDTIM(uint32_t value);
 void BleWifi_Wifi_UpdateBeaconInfo(void);
-	
+
 int BleWifi_Wifi_EventHandlerCb(wifi_event_id_t event_id, void *data, uint16_t length);
 void BleWifi_Wifi_Init(void);
 

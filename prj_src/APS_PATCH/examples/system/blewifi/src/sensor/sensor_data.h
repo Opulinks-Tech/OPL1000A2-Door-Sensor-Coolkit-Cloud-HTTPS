@@ -22,6 +22,11 @@
 
 #define SENSOR_DATA_OK      0
 #define SENSOR_DATA_FAIL    1
+#if 1   // Terence, implement new retry flow
+#define SENSOR_DATA_HTTPS_INIT_FAIL         2
+#define SENSOR_DATA_HTTPS_ESTABLISH_FAIL    3
+#define SENSOR_DATA_SOCKET_FAIL             4
+#endif
 
 #define SENSOR_COUNT   (32)
 

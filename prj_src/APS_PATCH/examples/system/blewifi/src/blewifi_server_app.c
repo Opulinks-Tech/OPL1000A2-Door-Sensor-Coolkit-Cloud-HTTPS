@@ -21,13 +21,13 @@
 #include "blewifi_server_app_gatt.h"
 #include "blewifi_ctrl.h"
 
-#include "mw_fim_default_group11_project.h"
-
 extern LE_ERR_STATE LeGapGetBdAddr(BD_ADDR addr);
 extern T_BleWifi_Ble_MsgHandlerTbl gBleGattMsgHandlerTbl[];
 
 static BLE_APP_DATA_T gTheBle;
 static BLE_ADV_TIME_T gTheBleAdvTime;
+
+extern T_MwFim_GP12_HttpPostContent g_tHttpPostContent;
 
 static void BleWifi_Ble_SmMsgHandler_PairingActionInd(TASK task, MESSAGEID id, MESSAGE message);
 static void BleWifi_Ble_SmMsgHandler_EncryptionChangeInd(TASK task, MESSAGEID id, MESSAGE message);
@@ -163,6 +163,7 @@ static void BleWifi_Ble_SetAdvtisingPara(UINT8 type, UINT8 own_addr_type, LE_BT_
     }
 }
 
+#if 0
 static void BleWifi_UtilHexToStr(void *data, UINT16 len, UINT8 **p)
 {
 	UINT8 t[] = "0123456789ABCDEF";
@@ -179,6 +180,7 @@ static void BleWifi_UtilHexToStr(void *data, UINT16 len, UINT8 **p)
 
     *p += (i << 1);
 }
+#endif
 
 static void BleWifi_Ble_SetAdvData(void)
 {
@@ -214,40 +216,46 @@ static void BleWifi_Ble_SetAdvData(void)
 
 static void BleWifi_Ble_SetScanData(void)
 {
-    T_MwFim_GP11_BleDeviceName tBleDeviceName;
     uint8_t ubLen;
     BOOL isOk = FALSE;
+    uint16_t u16RemainBufSize = 0;
 
-    // get the settings of BLE device name
-	if (MW_FIM_OK != MwFim_FileRead(MW_FIM_IDX_GP11_PROJECT_BLE_DEVICE_NAME, 0, MW_FIM_GP11_BLE_DEVICE_NAME_SIZE, (uint8_t*)&tBleDeviceName))
+    if (MW_FIM_OK != MwFim_FileRead(MW_FIM_IDX_GP12_PROJECT_DEVICE_AUTH_CONTENT, 0, MW_FIM_GP12_HTTP_POST_CONTENT_SIZE, (uint8_t *)&g_tHttpPostContent))
     {
-        // if fail, get the default value
-        memcpy(&tBleDeviceName, &g_tMwFimDefaultGp11BleDeviceName, MW_FIM_GP11_BLE_DEVICE_NAME_SIZE);
+        memcpy(&g_tHttpPostContent, &g_tMwFimDefaultGp12HttpPostContent, MW_FIM_GP12_HTTP_POST_CONTENT_SIZE);
     }
-    
-    if (tBleDeviceName.ubNameMethod == 1)
+
+    if (BLEWIFI_BLE_DEVICE_NAME_METHOD == 1)
     {
     	BD_ADDR addr;
 
     	if (LeGapGetBdAddr(addr) == SYS_ERR_SUCCESS)
     	{
     		UINT8 *p = gTheBle.scn_data.buf;
-    		UINT16 i = tBleDeviceName.ubNamePostfixMacCount;
 
     		// error handle, the mac address length
-    		if (i > 6)
-    		    i = 6;
             
     		*p++ = 0x10;
     		*p++ = GAP_ADTYPE_LOCAL_NAME_COMPLETE;
+    		u16RemainBufSize = BLE_ADV_SCAN_BUF_SIZE - 2;
             // error handle
             // !!! if i = 4, the other char are 12 bytes (i*3)
-            ubLen = strlen((const char *)(tBleDeviceName.ubaNamePrefix));
-    		if (ubLen > (BLE_ADV_SCAN_BUF_SIZE - 2 - (i*3)))
-    	        ubLen = BLE_ADV_SCAN_BUF_SIZE - 2 - (i*3);
-    		MemCopy(p, tBleDeviceName.ubaNamePrefix, ubLen);
-    		p += ubLen;
+            ubLen = strlen((const char *)(BLEWIFI_BLE_DEVICE_NAME_PREFIX));
+            if (ubLen > u16RemainBufSize)
+                ubLen = u16RemainBufSize;
 
+    		MemCopy(p, BLEWIFI_BLE_DEVICE_NAME_PREFIX, ubLen);
+    		u16RemainBufSize = u16RemainBufSize - ubLen;
+    		p += ubLen;
+            ubLen = strlen((const char *)(g_tHttpPostContent.ubaDeviceId));
+            if (ubLen > u16RemainBufSize)
+                ubLen = u16RemainBufSize;
+            MemCopy(p, g_tHttpPostContent.ubaDeviceId , ubLen);
+            p += ubLen;
+
+            gTheBle.scn_data.len = p - gTheBle.scn_data.buf;
+            gTheBle.scn_data.buf[0] = gTheBle.scn_data.len - 1;     // update the total length
+#if 0
             if (i > 0)
             {
         		while (i--)
@@ -264,20 +272,20 @@ static void BleWifi_Ble_SetScanData(void)
             }
 
             gTheBle.scn_data.buf[0] = gTheBle.scn_data.len - 1;     // update the total length
-
+#endif
             isOk = TRUE;
         }
     }
-    else if (tBleDeviceName.ubNameMethod == 2)
+    else if (BLEWIFI_BLE_DEVICE_NAME_METHOD == 2)
     {
         // error handle
-        ubLen = strlen((const char *)(tBleDeviceName.ubaNameFull));
+        ubLen = strlen((const char *)(BLEWIFI_BLE_DEVICE_NAME_FULL));
         if (ubLen > (BLE_ADV_SCAN_BUF_SIZE - 2))
             ubLen = (BLE_ADV_SCAN_BUF_SIZE - 2);
     	gTheBle.scn_data.len = ubLen + 2;
         gTheBle.scn_data.buf[0] = gTheBle.scn_data.len - 1;
         gTheBle.scn_data.buf[1] = GAP_ADTYPE_LOCAL_NAME_COMPLETE;
-        MemCopy(gTheBle.scn_data.buf + 2, tBleDeviceName.ubaNameFull, ubLen);
+        MemCopy(gTheBle.scn_data.buf + 2, BLEWIFI_BLE_DEVICE_NAME_FULL, ubLen);
 
         isOk = TRUE;
     }
@@ -301,18 +309,9 @@ static void BleWifi_Ble_SetScanData(void)
 
 static void BleWifi_Ble_CmMsgHandler_InitCompleteCfm(TASK task, MESSAGEID id, MESSAGE message)
 {
-    T_MwFim_GP11_BleAdvInterval tBleAdvInterval;
-
     // !!! after LeCmInit
     BLEWIFI_INFO("APP-LE_CM_MSG_INIT_COMPLETE_CFM\r\n");
 
-    // get the settings of BLE advertisement interval
-	if (MW_FIM_OK != MwFim_FileRead(MW_FIM_IDX_GP11_PROJECT_BLE_ADV_INTERVAL, 0, MW_FIM_GP11_BLE_ADV_INTERVAL_SIZE, (uint8_t*)&tBleAdvInterval))
-    {
-        // if fail, get the default value
-        memcpy(&tBleAdvInterval, &g_tMwFimDefaultGp11BleAdvInterval, MW_FIM_GP11_BLE_ADV_INTERVAL_SIZE);
-    }
-    
     LeGattInit(&gTheBle.task);
     LeSmpInit(&gTheBle.task);
     LeSmpSetDefaultConfig(LE_SM_IO_CAP_NO_IO, FALSE, FALSE, TRUE);
@@ -323,8 +322,8 @@ static void BleWifi_Ble_CmMsgHandler_InitCompleteCfm(TASK task, MESSAGEID id, ME
                                  LE_HCI_OWN_ADDR_PUBLIC,
                                  0,
                                  LE_HCI_ADV_FILT_NONE,
-                                 tBleAdvInterval.uwIntervalMin,
-                                 tBleAdvInterval.uwIntervalMax);
+                                 BLEWIFI_BLE_ADVERTISEMENT_INTERVAL_INIT_MIN,
+                                 BLEWIFI_BLE_ADVERTISEMENT_INTERVAL_INIT_MAX);
 }
 
 static void BleWifi_Ble_CmMsgHandler_SetAdvertisingDataCfm(TASK task, MESSAGEID id, MESSAGE message)

@@ -23,7 +23,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "blewifi_configuration.h"
-#include "mw_fim_default_group11_project.h"
 #include "mw_fim_default_group12_project.h"
 #include "cmsis_os.h"
 #include "event_groups.h"
@@ -149,6 +148,15 @@ typedef enum blewifi_ctrl_led_state
     BLEWIFI_CTRL_LED_BOOT_OFF_1,//Goter
     BLEWIFI_CTRL_LED_BOOT_ON_2,//Goter
 
+    BLEWIFI_CTRL_LED_MP_NO_ROUTER_ON_1,
+    BLEWIFI_CTRL_LED_MP_NO_ROUTER_OFF_1,
+    BLEWIFI_CTRL_LED_MP_NO_SERVER_ON_1,
+    BLEWIFI_CTRL_LED_MP_NO_SERVER_OFF_1,
+    BLEWIFI_CTRL_LED_MP_NO_SERVER_ON_2,
+    BLEWIFI_CTRL_LED_MP_NO_SERVER_OFF_2,
+
+    BLEWIFI_CTRL_LED_ALWAYS_ON,
+
     BLEWIFI_CTRL_LED_NUM
 } blewifi_ctrl_led_state_e;
 
@@ -162,12 +170,15 @@ typedef enum blewifi_ctrl_sys_state
 } blewifi_ctrl_sys_state_e;
 
 // event group bit (0 ~ 23 bits)
-#define BLEWIFI_CTRL_EVENT_BIT_BLE      0x00000001U
-#define BLEWIFI_CTRL_EVENT_BIT_WIFI     0x00000002U
-#define BLEWIFI_CTRL_EVENT_BIT_OTA      0x00000004U
-#define BLEWIFI_CTRL_EVENT_BIT_GOT_IP   0x00000008U
-#define BLEWIFI_CTRL_EVENT_BIT_IOT_INIT 0x00000010U
-#define BLEWIFI_CTRL_EVENT_BIT_NETWORK  0x00000020U
+#define BLEWIFI_CTRL_EVENT_BIT_BLE              0x00000001U
+#define BLEWIFI_CTRL_EVENT_BIT_WIFI             0x00000002U
+#define BLEWIFI_CTRL_EVENT_BIT_OTA              0x00000004U
+#define BLEWIFI_CTRL_EVENT_BIT_GOT_IP           0x00000008U
+#define BLEWIFI_CTRL_EVENT_BIT_IOT_INIT         0x00000010U
+#define BLEWIFI_CTRL_EVENT_BIT_NETWORK          0x00000020U
+#define BLEWIFI_CTRL_EVENT_BIT_WIFI_SCANNING    0x00000040U
+#define BLEWIFI_CTRL_EVENT_BIT_WIFI_CONNECTING  0x00000080U
+
 
 #ifdef SLEEP_TIMER_ISSUE
 // When button or key press timeout, system will trigger button event occasionally.
@@ -188,8 +199,13 @@ typedef enum blewifi_ctrl_sys_state
 
 
 #define POST_DATA_TIME              (3600000)  // 1 hour - smart sleep for one hour then post data
-#define POST_DATA_TIME_RETRY        (20000)   // 20 sec - hourly post fail will per 20 sec so retry yes
+//#define POST_DATA_TIME_RETRY        (20000)   // 20 sec - hourly post fail will per 20 sec so retry yes
+#define POST_DATA_TIME_RETRY        (100)   // 100 ms - post fail will per 100 ms so retry yes
 
+#define MP_MODE_NO_SERVER (1)
+#define MP_MODE_NO_ROUTER (2)
+
+#define BLEWIFI_CTRL_MANUALLY_CONN_SCAN_RETRY    (3) //Manually connect wifi scan retry max count
 
 //#define TEST_MODE_DEBUG_ENABLE
 
@@ -201,11 +217,9 @@ typedef struct
     T_BleWifi_Ctrl_EvtHandler_Fp fpFunc;
 } T_BleWifi_Ctrl_EvtHandlerTbl;
 
-#define BLEWIFI_CTRL_AUTO_CONN_STATE_IDLE   (g_tAppCtrlWifiConnectSettings.ubConnectRetry + 1)
+#define BLEWIFI_CTRL_AUTO_CONN_STATE_IDLE   (BLEWIFI_WIFI_REQ_CONNECT_RETRY_TIMES + 1)
 #define BLEWIFI_CTRL_AUTO_CONN_STATE_SCAN   (BLEWIFI_CTRL_AUTO_CONN_STATE_IDLE + 1)
 
-extern T_MwFim_GP11_WifiConnectSettings g_tAppCtrlWifiConnectSettings;
-extern T_MwFim_GP12_DCSlope g_tDCSlope;
 
 void BleWifi_Ctrl_SysModeSet(uint8_t mode);
 uint8_t BleWifi_Ctrl_SysModeGet(void);

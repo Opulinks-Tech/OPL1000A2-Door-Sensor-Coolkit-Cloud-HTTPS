@@ -13,10 +13,6 @@
 #define __BLEWIFI_CONFIGURATION_H__
 
 // Common part
-/*
-FIM version
-*/
-#define MW_FIM_VER11_PROJECT            0x05    // 0x00 ~ 0xFF
 
 /*
 Smart sleep
@@ -26,27 +22,35 @@ Smart sleep
 /*
 RF Power
 
-.-----------------.----------------.----------------.
-|                 |  BLE Low Power | BLE High Power |
-:-----------------+----------------+----------------:
-| WIFI Low power  |  0x00          | 0x0F           |
-:-----------------+----------------+----------------:
-| WIFI Low power  |  0x20          | 0x0F           |
-|   + 2 DB        |                |                |
-:-----------------+----------------+----------------:
-| WIFI High power |  0xF0          | 0xFF           |
-'-----------------'----------------'----------------'
+.-----------------.----------------.
+|                 |  BLE Low Power |
+:-----------------+----------------+
+| WIFI Low power  |  0x00          |
+:-----------------+----------------+
+| WIFI Low power  |  0x20          |
+|   + 2 DB        |                |
+:-----------------+----------------+
+| WIFI Low power  |  0x40          |
+|   + 4 DB        |                |
+:-----------------+----------------+
+| WIFI High power |  0xB0          |
+:-----------------+----------------+
+| WIFI High power |  0xD0          |
+|   + 3 DB        |                |
+| (For SDK >= 20) |                |
+'-----------------+----------------+
+
 */
-#define BLEWIFI_COM_RF_POWER_SETTINGS   (0x40)
-#define BLEWIFI_COM_RF_SMPS_SETTING     (2)     //0 : 1.2,  2 : 1.4    
+#define BLEWIFI_COM_RF_POWER_SETTINGS   (0xA0)
+#define BLEWIFI_COM_RF_SMPS_SETTING     (2)     //0 : 1.2,  2 : 1.4
 
 /*
 SNTP
 */
-#define SNTP_FUNCTION_EN      (1)                   // SNTP 1: enable / 0: disable
+#define SNTP_FUNCTION_EN      (0)                   // SNTP 1: enable / 0: disable
 #define SNTP_SERVER           "1.cn.pool.ntp.org"   // SNTP Server
 #define SNTP_PORT_NUM         "123"                 // SNTP port Number
-#define SNTP_TIME_ZONE        (0)                   // Time zone: GMT+0 
+#define SNTP_TIME_ZONE        (0)                   // Time zone: GMT+0
 
 /*
 BLE OTA FLAG
@@ -97,26 +101,30 @@ method 2: full name
 */
 #define BLEWIFI_BLE_DEVICE_NAME_METHOD      1           // 1 or 2
 #define BLEWIFI_BLE_DEVICE_NAME_POST_COUNT  4           // for method 1 "OPL_33:44:55:66"
-#define BLEWIFI_BLE_DEVICE_NAME_PREFIX      "OPL_"      // for method 1 "OPL_33:44:55:66"
+#define BLEWIFI_BLE_DEVICE_NAME_PREFIX      "ck_"      // for method 1 "OPL_33:44:55:66"
 #define BLEWIFI_BLE_DEVICE_NAME_FULL        "OPL1000"   // for method 2
 
 /* Advertisement Interval When BLE disconnectted:
  0xFFFF is deifined 30 min in dirver part
 */
-#define BLEWIFI_BLE_ADVERTISEMENT_INTERVAL_MIN  0xFFFF  // For 30 min   //Goter
-#define BLEWIFI_BLE_ADVERTISEMENT_INTERVAL_MAX  0xFFFF  // For 30 min
+#define BLEWIFI_BLE_ADVERTISEMENT_INTERVAL_PS_MIN  0xFFFF  // For 30 min   //Goter
+#define BLEWIFI_BLE_ADVERTISEMENT_INTERVAL_PS_MAX  0xFFFF  // For 30 min
 
 /* For network period
-1000 (ms) / 0.625 (ms) = 1600 = 0x640
+100 (ms) / 0.625 (ms) = 160 = 0xA0
 */
-#define BLEWIFI_BLE_ADVERTISEMENT_INTERVAL_PS_MIN   0xA0  // For 100 millisecond
-#define BLEWIFI_BLE_ADVERTISEMENT_INTERVAL_PS_MAX   0xA0  // For 100 millisecond
+#define BLEWIFI_BLE_ADVERTISEMENT_INTERVAL_MIN   0xA0  // For 100 millisecond
+#define BLEWIFI_BLE_ADVERTISEMENT_INTERVAL_MAX   0xA0  // For 100 millisecond
 
 /* For Calibration
 100 (ms) / 0.625 (ms) = 160 = 0xA0
 */
 #define BLEWIFI_BLE_ADVERTISEMENT_INTERVAL_CAL_MIN   0xA0  // For 100 millisecond
 #define BLEWIFI_BLE_ADVERTISEMENT_INTERVAL_CAL_MAX   0xA0  // For 100 millisecond
+
+/* For the initial settings of Advertisement Interval */
+#define BLEWIFI_BLE_ADVERTISEMENT_INTERVAL_INIT_MIN     BLEWIFI_BLE_ADVERTISEMENT_INTERVAL_PS_MIN
+#define BLEWIFI_BLE_ADVERTISEMENT_INTERVAL_INIT_MAX     BLEWIFI_BLE_ADVERTISEMENT_INTERVAL_PS_MAX
 
 // Wifi part
 /* Connection Retry times:
@@ -141,6 +149,7 @@ if the auto connection is fail, the interval will be increased
 #define BLEWIFI_WIFI_AUTO_CONNECT_INTERVAL_MAX      (30000)     // ms
 #define BLEWIFI_WIFI_AUTO_CONNECT_LIFETIME_MAX      (180000)    //ms
 
+#define BLEWIFI_POST_FAIL_LED_MAX                   (60000)     //ms
 
 /* DTIM the times of Interval: ms
 */
@@ -160,7 +169,7 @@ if the auto connection is fail, the interval will be increased
 /* GPIO IO Port */
 #define BUTTON_IO_PORT      (GPIO_IDX_04)
 #define MAGNETIC_IO_PORT    (GPIO_IDX_05)
-#define BATTERY_IO_PORT     (GPIO_IDX_07)
+#define BATTERY_IO_PORT     (GPIO_IDX_02)
 #define LED_IO_PORT         (GPIO_IDX_21)
 
 /* LED time : unit: ms */
@@ -205,6 +214,15 @@ if the auto connection is fail, the interval will be increased
 #define LED_TIME_BOOT_OFF_1         (100)//Goter
 #define LED_TIME_BOOT_ON_2          (100)//Goter
 
+#define LED_MP_NO_ROUTER_ON_1       (100)
+#define LED_MP_NO_ROUTER_OFF_1      (1900)
+#define LED_MP_NO_SERVER_ON_1       (100)
+#define LED_MP_NO_SERVER_OFF_1      (100)
+#define LED_MP_NO_SERVER_ON_2       (100)
+#define LED_MP_NO_SERVER_OFF_2      (1700)
+
+#define LED_ALWAYS_ON               (0x7FFFFFFF)
+
 #if 0
 /* Button Debounce time : unit: ms */
 #define TIMEOUT_DEBOUNCE_TIME        (30)      // 30 ms
@@ -226,19 +244,24 @@ if the auto connection is fail, the interval will be increased
 #define DOOR_DEBOUNCE_TIMEOUT        (200)     // 200ms
 
 /* SSL RX Socket Timeout : unit: ms */
+#define SOCKET_CONNECT_TIMEOUT       (3000)
+#define SSL_HANDSHAKE_TIMEOUT        (4600)
 #define SSL_SOCKET_TIMEOUT           (3500)    // 2 sec
+#define OTA_SOCKET_TIMEOUT           (30000)
+
+#define OTA_TOTAL_TIMEOUT           (180000)
 
 /*
 Define the moving average count for temperature and VBAT
 */
-#define SENSOR_MOVING_AVERAGE_COUNT         (5)
+#define SENSOR_MOVING_AVERAGE_COUNT         (1)
 
 /*
 Define Maximum Voltage & Minimum Voltage
 */
-#define MAXIMUM_VOLTAGE_DEF     (1.5f)    //(3.0f)
-#define MINIMUM_VOLTAGE_DEF     (0.75f)    //(1.5f)
-#define VOLTAGE_OFFSET          (0.19f)
+#define MAXIMUM_VOLTAGE_DEF     (3.0f)    //(3.0f)
+#define MINIMUM_VOLTAGE_DEF     (1.5f)    //(1.5f)
+#define VOLTAGE_OFFSET          (0.0f)
 
 /*
 Define CR+LF Enable / Disable (Windows:CR+LF, Linux:CR and Mac:LF)
@@ -257,6 +280,8 @@ Define Timer:
 
 // Set Uart baudrate
 #define BLEWIFI_SYS_UART_BAUDRATE (9600)
+
+#define MP_MODE_SCAN_AP_TIMEOUT   (3000)    // ms
 
 #endif /* __BLEWIFI_CONFIGURATION_H__ */
 
